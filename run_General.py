@@ -14,11 +14,14 @@ from spectral_cube import SpectralCube
 import imageio
 import matplotlib.backends.backend_pdf as pdf
 
-HAWC = '/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits'
-HAWE = '/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits'
-#ALMA = '/Users/akankshabij/Documents/MSc/Research/Data/ALMA/VelaC-CR-A_cont.fits'
-ALMA = 'Data/Observations/ALMA_Band6_continuum.fits'
-ALMA_13CS = '/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CS_Cube.fits'
+# HAWC = '/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits'
+# HAWE = '/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits'
+ALMA = '/Users/akankshabij/Documents/MSc/Research/Data/ALMA/VelaC_CR_ALMA2D.fits'
+#ALMA = 'Data/Observations/ALMA_Band6_continuum.fits'
+# ALMA_13CS = '/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CS_Cube.fits'
+Hersch = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits')[0]
+HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
+vecMask = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/masks/rereduced/BandC_polFlux_3.fits')[0]
 
 def runAll():
     Hersch = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits')[0]
@@ -253,69 +256,93 @@ def CubeFlow(fits_fl, folder, out, start=-3, end=17, startNoise=-3, endNoise=-1,
     # plotPRS_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandE/12CO/Cube/')
     # plotHIST_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandE/12CO/Cube/')
 
-def runCube(fits_fl, folder, out, start=3, end=10, index=0, project=False, highRes=True, band=0):
-    data = fits.open(fits_fl)[index]
-    incr = (int(end) - int(start))*10 + 1
-    speed = np.round(np.linspace(start,end,incr), 1)
+def runCube(cube_fl, bmap_fl, out_fldr, regions=None,  mask_fl=None, start=3, end=10, incr=0.1, index=0, project=False, highRes=False, band=2, pdfName='/mom0.pdf', gifName='/mom0.gif', projMap=None, kstep=2, colDen=None):
+    data = fits.open(cube_fl)[index]
     cube = SpectralCube.read(data)
-    #noise = fits.open(folder + 'NoiseMap_std.fits')[0]
-    #mean = fits.open(folder + 'NoiseMap_mean.fits')[0]
-    #print("*** NOISE SHAPE IS *** ", noise.shape)
-    if band==0:
-        HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
-    elif band==1:
-        HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits')
-    else:
-        HAWC = fits.open('Data/Observations/12CO_Integrated.fits')
-    print("*** HAWC SHAPE IS *** ", HAWC[0].shape)
+    splits = int((end - start)/incr) + 1
+    #splits2 = int((end - start)/0.5) + 1
+    speed = np.round(np.linspace(start,end,splits), 1)
+    bmap = fits.open(bmap_fl)[11]
+
     PRS = np.zeros((3,len(speed)))
     PRS[0] = speed
     hists = np.zeros((len(speed),20))
     Phi = []
     j = 0
+    _pdf = pdf.PdfPages(out_fldr + pdfName)
+    moms = []
     for i in speed:
         cube_speed = cube.with_spectral_unit(unit=u.km/u.s, velocity_convention='optical')
-        slab = cube_speed.spectral_slab(i*u.km/u.s, (i+0.1)*u.km/u.s)
+        slab = cube_speed.spectral_slab(i*u.km/u.s, (i+incr)*u.km/u.s)
         mom0 = slab.moment0()
         if project:
-            mom0_HAWC = HAWC[0].copy()
-            mom0_HAWC.data = projectMap(mom0.hdu, HAWC[0])
+            Bmap = bmap
+            mom0_HAWC = bmap.copy()
+            mom0_HAWC.data = projectMap(mom0.hdu, Bmap)
         else:
             mom0_HAWC = mom0.hdu
+            Bmap = mom0_HAWC.copy()
+            #Bmap.data = projectMap(bmap, mom0.hdu)
+            Bmap.data = ((projectMap(bmap, mom0.hdu) * u.deg).to(u.rad)).value
+        if (projMap is None)==False:
+            mom0_HAWC = projMap.copy()
+            mom0_HAWC.data = projectMap(mom0.hdu, projMap)
+            Bmap = projMap.copy()
+            Bmap.data = projectMap(bmap, projMap)
         print("*** mom0 SHAPE IS *** ", mom0_HAWC.shape)
-        fldr = '{0}_kmpers/'.format(i)
-        outName = out + fldr
-        label =  outName + '{0}-{1} km/s'.format(i, i+0.1)
-        if os.path.exists(folder + fldr)==False:
-            os.mkdir(folder + fldr)
+        fldr = out_fldr + '/{0}_kms/'.format(i)
+        label =  '{0}-{1} km/s'.format(i, i+incr)
+        if os.path.exists(fldr)==False:
+            os.mkdir(fldr)
         #Mask = HAWC[0].copy()
         #Mask.data = np.ones(HAWC[0].data.shape)
-        Mask = HAWC[0].copy()
-        Mask.data = np.ones(mom0_HAWC.shape)
-        #print("*** MASK SHAPE IS *** ", Mask.data.shape)
-        #print("*** mean std is ***", np.nanmean(noise.data))
-        #Mask.data[(mom0_HAWC.data / 0.014) < 3]=0 #C18O = 0.026, SiO=0.015; 13CS=0.02; 13CN = 0.014
-        #Mask.data[(mom0_HAWC.data / noise.data) < 3]=0
-        #Mask.data[np.isnan(mom0_HAWC.data)]=np.nan
-        fig = plt.figure(figsize=[12,8])
-        fxx = aplpy.FITSFigure(Mask, figure=fig)
-        fxx.show_colorscale(vmax=1, vmin=0)
-        fxx.add_colorbar()
-        fxx.add_label(0.85, 0.85, text='{0} km/s'.format(i), relative=True, color='white', size='xx-large', weight='demibold')
 
-        plt.savefig(folder + fldr + 'DataMask.png')
+        if mask_fl is None:
+            Mask = Bmap.copy()
+            Mask.data = np.ones(mom0_HAWC.shape)
+
+            if (regions is None)==False:  
+                Std = []; Mean = []
+                for region in regions:
+                    s = np.nanstd(mom0_HAWC.data[region[0]-10:region[0]+10, region[1]-10:region[1]+10])
+                    print(s)
+                    m = np.nanmean(mom0_HAWC.data[region[0]-10:region[0]+10, region[1]-10:region[1]+10])
+                    Std.append(s)
+                    Mean.append(m)
+                std = np.nanmean(np.asarray(Std))
+                mean = np.nanmean(np.asarray(Mean))
+                
+                Mask.data[((mom0_HAWC.data - mean) / std) < 4]=0  
+                Mask.data[np.isnan(mom0_HAWC.data)]=np.nan
+        
+        else:
+            Mask = fits.open(mask_fl)[0]
+
+        plt.close('all')
         fig = plt.figure(figsize=[12,8])
         fxx = aplpy.FITSFigure(Mask, figure=fig)
         fxx.show_colorscale(vmax=1, vmin=0)
         fxx.add_colorbar()
         fxx.add_label(0.85, 0.85, text='{0} km/s'.format(i), relative=True, color='white', size='xx-large', weight='demibold')
-        plt.savefig(folder + fldr + 'DataMask.png')
-        # for i in range(mom0_HAWC.shape[0]):
-        #     for j in range(mom0_HAWC.shape[1]):
-        #         if (mom0_HAWC[i,j] / noise.data[i,j]) < 3:
-        #             Mask.data[i,j]=0
-        print(outName)
-        hro = runAnalysis('', outName=outName, Mask=Mask, label=label, index=index, project=False, kernel='Gaussian', kstep=3, isSim=False, band=band, highRes=highRes, file=False, Map=mom0_HAWC)
+        plt.savefig(fldr + '/DataMask.png')
+
+        fig = plt.figure(figsize=[12,8])
+        fxx = aplpy.FITSFigure(mom0_HAWC, figure=fig)
+        fxx.show_colorscale(interpolation='nearest')
+        #fxx.show_colorscale(vmax=18, vmin=-7)
+        fxx.add_colorbar()
+        fxx.add_label(0.85, 0.85, text='{0} km/s'.format(i), relative=True, color='black', size='xx-large', weight='demibold')
+        fxx.show_vectors(Mask, Bmap, step=20, scale =20, units='radians', color = 'White', linewidth=3)
+        fxx.show_vectors(Mask, Bmap, step=20, scale =20, units='radians', color = 'Black', linewidth=1)
+        #fxx.show_contour(Hersch, levels=[15,20,50,80], colors='black')
+        if (colDen is None)==False:
+            fxx.show_contour(fits.open(colDen)[0], levels=[0.7e23,1e23,1.5e23,2.5e23], colors='black')
+        figName =  fldr + '/mom0.png'
+        plt.savefig(figName)
+        moms.append(imageio.imread(figName))
+        _pdf.savefig(fig)
+
+        hro = runAnalysis(Bmap=Bmap.data, outName=fldr+'/', Mask=Mask, vecMask=Mask, label=label, index=index, project=False, kernel='Gaussian', kstep=kstep, isSim=False, band=band, highRes=highRes, file=False, Map=mom0_HAWC)
         PRS[1,j] = hro.Zx
         PRS[2,j] = hro.meanPhi
         hists[j] = hro.hist
@@ -323,9 +350,14 @@ def runCube(fits_fl, folder, out, start=3, end=10, index=0, project=False, highR
         j = j+1
     print(PRS.shape)
     print(hists.shape)
-    np.save(folder + 'PRS_speed.npy', PRS)
-    np.save(folder + 'hist_speed.npy', hists)
-    np.save(folder + 'total_phi.npy', Phi)
+    np.save(out_fldr + '/PRS_speed.npy', PRS)
+    np.save(out_fldr + '/hist_speed.npy', hists)
+    np.save(out_fldr + '/total_phi.npy', Phi)
+    _pdf.close()
+    imageio.mimsave(out_fldr + gifName, moms, fps=4)
+    gifCube(out_fldr, speed)
+    plotPRS_speed(out_fldr)
+    plotHIST_speed(out_fldr)
 
 def runMaskCube(fits_fl, folder, out, regions, start=3, end=10, index=0, project=False, highRes=True, band=0):
     data = fits.open(fits_fl)[index]
@@ -422,18 +454,18 @@ def runMaskCube(fits_fl, folder, out, regions, start=3, end=10, index=0, project
     np.save(folder + 'hist_speed.npy', hists)
     np.save(folder + 'total_phi.npy', Phi)
 
-def gifCube(fldr):
-    speed = np.round(np.linspace(-3,3,71), 1)
+def gifCube(fldr, speed):
+    #speed = np.round(np.linspace(-3,3,71), 1)
     #cube = SpectralCube.read(fitsfl)
     Hist = [] ; Phi = []; Mask = [] ; Mom = []
     #_pdf = pdf.PdfPages('Output_Plots/BandC/12CO/Cube/' + pdfName)
     for i in speed:
-        folder = fldr + '{0}_kmpers/'.format(i)
+        folder = fldr + '/{0}_kms/'.format(i)
 
-        hist = folder + 'MASKED__phi_secthistogram.png'
-        phi = folder + 'MASKED_phi.png'
-        mask = folder + 'DataMask.png'
-        mom = folder + 'mom0_regions.png'
+        hist = folder + '/_phi_secthistogram.png'
+        phi = folder + '/phi.png'
+        mask = folder + '/DataMask.png'
+        mom = folder + '/mom0.png'
 
         Hist.append(imageio.imread(hist))
         Phi.append(imageio.imread(phi))
@@ -441,45 +473,40 @@ def gifCube(fldr):
         Mom.append(imageio.imread(mom))
         #_pdf.savefig(hist)
     #_pdf.close()
-    imageio.mimsave(fldr + 'DataMask.gif', Mask, fps=6)
-    imageio.mimsave(fldr + 'mom0_regions.gif', Mom, fps=6)
-    imageio.mimsave(fldr + 'phi.gif', Phi, fps=6)
-    imageio.mimsave(fldr + 'Hist.gif', Hist, fps=6)
+    imageio.mimsave(fldr + '/DataMask.gif', Mask, fps=6)
+    imageio.mimsave(fldr + '/mom0.gif', Mom, fps=6)
+    imageio.mimsave(fldr + '/phi.gif', Phi, fps=6)
+    imageio.mimsave(fldr + '/Hist.gif', Hist, fps=6)
 
-def plotCube(fits_fl, folder, start=-1, end=13, index=0, pdfName='', gifName='', project=True, band=0):
+def plotCube(fits_fl, bmap_fl, out_fldr, start=-1, end=13, incr=0.1, index=0, pdfName='', gifName='', project=True, band=0):
     data = fits.open(fits_fl)[index]
-    incr = (int(end) - int(start))*10 + 1
-    speed = np.round(np.linspace(start,end,incr), 1)
+    splits = int((end - start)/incr) + 1
+    speed = np.round(np.linspace(start,end,splits), 1)
     cube = SpectralCube.read(data)
+    Bmap = fits.open(bmap_fl)[0]
     _pdf = pdf.PdfPages(folder + pdfName)
     moms = []; maps = []
-    CO12 = fits.open('Data/Observations/12CO_Integrated.fits')
-    if band==0:
-        HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
-        vecMask = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/masks/rereduced/BandC_polFlux_3.fits')[0]
-    elif band==1:
-        HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits')
-        vecMask = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/masks/rereduced/BandE_polFlux_3.fits')[0]
-    else:
-        BLASTpol = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/BlastPOL/BLASTPol_500_intermediate_BPOSang.fits')
-        vecMask = BLASTpol[0].copy()
-        vecMask.data = np.ones(BLASTpol[0].data.shape)
-    Hersch = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits')
+
     for i in speed:
         cube_speed = cube.with_spectral_unit(unit=u.km/u.s, velocity_convention='radio')
-        slab = cube_speed.spectral_slab(i*u.km/u.s, (i+0.5)*u.km/u.s)
+        slab = cube_speed.spectral_slab(i*u.km/u.s, (i+incr)*u.km/u.s)
         mom0 = slab.moment0()
-        if project and band!=2:
-            mom0_HAWC = HAWC[0].copy()
-            mom0_HAWC.data = projectMap(mom0.hdu, HAWC[0])
-        elif project and band==2:
-            mom0_HAWC = CO12[0].copy()
-            mom0_HAWC.data = projectMap(mom0.hdu, CO12[0])
-        elif project==False: 
+        # if project and band!=2:
+        #     mom0_HAWC = HAWC[0].copy()
+        #     mom0_HAWC.data = projectMap(mom0.hdu, HAWC[0])
+        # elif project and band==2:
+        #     mom0_HAWC = CO12[0].copy()
+        #     mom0_HAWC.data = projectMap(mom0.hdu, CO12[0])
+        # elif project==False: 
+        #     mom0_HAWC = mom0.hdu
+        if project:
+            mom0_HAWC = Bmap.copy()
+            mom0_HAWC.data = projectMap(mom0.hdu, Bmap)
+        else:
             mom0_HAWC = mom0.hdu
         maps.append(mom0_HAWC.data)
-        fldr = '{0}_kmpers/'.format(i)
-        outName = folder + fldr
+        fldr = '/{0}_kms/'.format(i)
+        outName = out_fldr + fldr
         if os.path.exists(outName)==False:
             os.mkdir(outName)
         plt.close('all')
@@ -569,63 +596,58 @@ def ALMACont(fits_fl, folder, start=-1, end=13, index=0, pdfName='', gifName='',
     _pdf.close()
     imageio.mimsave(folder + gifName, moms, fps=6)
 
-def mom1_1km(fits_fl, folder, start=-1, end=13, index=0, pdfName='', gifName='', project=True, band=0):
-    data = fits.open(fits_fl)[index]
-    incr = (int(end) - int(start))*5 + 1
-    speed = np.round(np.linspace(start,end,incr), 1)
+def mom1_1km(cube_fl, bmap_fl, folder, start=-1, end=13, index=0, incr=0.1, pdfName='', gifName='', project=True, band=0, projMap=None, colDen=None):
+    data = fits.open(cube_fl)[index]
     cube = SpectralCube.read(data)
-    _pdf = pdf.PdfPages(folder + pdfName)
+    splits = int((end - start)/incr) + 1
+    speed = np.round(np.linspace(start,end,splits), 1)
+    bmap = fits.open(bmap_fl)[0]
+    _pdf = pdf.PdfPages(folder + '/mom1.pdf')
     moms = []; maps = []
-    CO12 = fits.open('Data/Observations/12CO_Integrated.fits')
-    if band==0:
-        HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
-        vecMask = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/masks/rereduced/BandC_polFlux_3.fits')[0]
-    elif band==1:
-        HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits')
-        vecMask = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/masks/rereduced/BandE_polFlux_3.fits')[0]
-    else:
-        BLASTpol = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/BlastPOL/BLASTPol_500_intermediate_BPOSang.fits')
-        vecMask = BLASTpol[0].copy()
-        vecMask.data = np.ones(BLASTpol[0].data.shape)
-    Hersch = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits')
+
     for i in speed:
         cube_speed = cube.with_spectral_unit(unit=u.km/u.s, velocity_convention='optical')
         slab = cube_speed.spectral_slab(i*u.km/u.s, (i+1)*u.km/u.s)
         mom0 = slab.moment1()
-        if project and band!=2:
-            mom0_HAWC = HAWC[0].copy()
-            mom0_HAWC.data = projectMap(mom0.hdu, HAWC[0])
-        elif project and band==2:
-            mom0_HAWC = CO12[0].copy()
-            mom0_HAWC.data = projectMap(mom0.hdu, CO12[0])
-        elif project==False: 
+        if project:
+            Bmap = bmap
+            mom0_HAWC = bmap.copy()
+            mom0_HAWC.data = projectMap(mom0.hdu, Bmap)
+        else:
             mom0_HAWC = mom0.hdu
+            Bmap = mom0_HAWC.copy()
+            Bmap.data = projectMap(bmap, mom0.hdu)
+        if (projMap is None)==False:
+            mom0_HAWC = projMap.copy()
+            mom0_HAWC.data = projectMap(mom0.hdu, projMap)
+            Bmap = projMap.copy()
+            Bmap.data = projectMap(bmap, projMap)
         maps.append(mom0_HAWC.data)
-        fldr = '{0}_kmpers/'.format(i)
-        outName = folder + fldr
+        outName = folder + '/{0}_kms/'.format(i)
+        label =  '{0}-{1} km/s'.format(i, i+incr)
         if os.path.exists(outName)==False:
             os.mkdir(outName)
         plt.close('all')
         fig = plt.figure(figsize=[12,8])
         fxx = aplpy.FITSFigure(mom0_HAWC, figure=fig)
+        fxx.recenter(134.87,-43.74, height=0.22, width=0.22)
         #fxx.show_colorscale(interpolation='nearest')
         fxx.show_colorscale(vmax=i+1, vmin=i, cmap='bwr')
         fxx.add_colorbar()
         fxx.add_label(0.85, 0.85, text='{0} km/s'.format(i), relative=True, color='black', size='xx-large', weight='demibold')
-        if band!=2:
-            fxx.show_vectors(vecMask, HAWC[11], step=6, scale =4, units='degrees', color = 'White', linewidth=3)
-            fxx.show_vectors(vecMask, HAWC[11], step=6, scale =4, units='degrees', color = 'Black', linewidth=1)
-        else:
-            fxx.show_vectors(vecMask, BLASTpol[0], step=6, scale =4, units='radians', color = 'White', linewidth=3)
-            fxx.show_vectors(vecMask, BLASTpol[0], step=6, scale =4, units='radians', color = 'Black', linewidth=1)
-        fxx.show_contour(Hersch, levels=[15,20,50,80], colors='black')
-        #fxx.show_contour(fits.open(ALMA)[0], levels=[0.01, 0.02], colors='black')
-        figName = outName + 'mom1.png'
+        if (colDen is None)==False:
+            #fxx.show_contour(fits.open(colDen)[0], levels=[0.7e23,1e23,1.5e23,2.5e23], colors='black')
+            fxx.show_contour(fits.open(colDen)[0], levels=[20, 50, 100], colors='black')
+        # fxx.show_vectors(vecMask, Bmap, step=10, scale =8, units='degrees', color = 'White', linewidth=3)
+        # fxx.show_vectors(vecMask, Bmap, step=10, scale =8, units='degrees', color = 'Black', linewidth=1)
+        # fxx.show_contour(Hersch, levels=[15,20,50,80], colors='black')
+        fxx.show_contour(fits.open(ALMA)[0], levels=[0.01, 0.02], colors='black')
+        figName = outName + '/mom1.png'
         plt.savefig(figName)
         moms.append(imageio.imread(figName))
         _pdf.savefig(fig)
     _pdf.close()
-    imageio.mimsave(folder + gifName, moms, fps=5)
+    imageio.mimsave(folder + '/mom1.gif', moms, fps=5)
 
 def mom0_1km(fits_fl, folder, start=-1, end=13, index=0, pdfName='', gifName='', project=True, band=0):
     data = fits.open(fits_fl)[index]
@@ -685,6 +707,50 @@ def mom0_1km(fits_fl, folder, start=-1, end=13, index=0, pdfName='', gifName='',
     _pdf.close()
     imageio.mimsave(folder + gifName, moms, fps=5)
 
+def RGB_Cube(cube_fl, out_fldr,  velocity=[-3,6,9,17], projMap=None, colDen=None):
+    data = fits.open(cube_fl)[0]
+    cube_s = SpectralCube.read(data)
+    cube = cube_s.with_spectral_unit(unit=u.km/u.s, velocity_convention='optical')
+    slab_B = cube.spectral_slab(velocity[0]*u.km/u.s, velocity[1]*u.km/u.s)
+    slab_G = cube.spectral_slab(velocity[1]*u.km/u.s, velocity[2]*u.km/u.s)
+    slab_R = cube.spectral_slab(velocity[2]*u.km/u.s, velocity[3]*u.km/u.s)
+
+    if (projMap is None)==False:
+        mom0_B = projMap.copy()
+        mom0_B.data = projectMap(slab_B.moment0().hdu, projMap)
+        mom0_G = projMap.copy()
+        mom0_G.data = projectMap(slab_G.moment0().hdu, projMap)
+        mom0_R = projMap.copy()
+        mom0_R.data = projectMap(slab_R.moment0().hdu, projMap)
+
+    else:
+        mom0_B = slab_B.moment0().hdu
+        mom0_G = slab_G.moment0().hdu
+        mom0_R = slab_R.moment0().hdu
+
+    mom0_B.writeto(out_fldr + '/Cube_B.fits', overwrite=True)
+    mom0_G.writeto(out_fldr + '/Cube_G.fits', overwrite=True)
+    mom0_R.writeto(out_fldr + '/Cube_R.fits', overwrite=True)
+
+    aplpy.make_rgb_cube([out_fldr + '/Cube_R.fits', out_fldr + '/Cube_G.fits', out_fldr + '/Cube_B.fits'], out_fldr + '/RGB_speeds.fits')
+    aplpy.make_rgb_image(out_fldr + '/RGB_speeds.fits', out_fldr + '/RGB_speeds.png', 
+                        stretch_r='linear',stretch_g='linear',stretch_b='linear')
+
+    fig = plt.figure(figsize=[10,8], dpi=300)
+    f = aplpy.FITSFigure(out_fldr + '/RGB_speeds.png', figure=fig)
+    f.show_rgb()
+    #if (colDen is None)==False:
+    #        f.show_contour(fits.open(colDen)[0], levels=[0.7e23,1e23,1.5e23,2.5e23], colors='black')
+    #f.recenter(134.87,-43.78, height=0.2, width=0.2)
+    #f.recenter(134.87,-43.74, height=0.15, width=0.15)
+    f.show_contour(Hersch, levels=[15,20,50,80], colors='black')
+    f.recenter(134.87,-43.74, height=0.3, width=0.3)
+    #f.show_vectors(BlastMask, fits.open(BlastPol)[0], step=7, scale =4, units='radians', color = 'gray', linewidth=0.8)
+    f.show_vectors(vecMask, HAWC[11], step=5, scale=3, units='degrees', color='cyan', linewidth=1.5)
+    #f.show_contour(colDen, levels=[20, 50, 100], colors='lightgray')
+    #f.show_markers([OB9.ra.value, OB9_7.ra.value], [OB9.dec.value, OB9_7.dec.value], coords_frame='world', marker="*", s=2**8, c='yellow')
+    plt.savefig(out_fldr + '/RGB_speeds.png')
+
 def calcNoise(fits_fl, fldr, index=0, start=-1, end=1, project=False, band=0):
     data = fits.open(fits_fl)[index]
     print(data.shape)
@@ -741,112 +807,79 @@ def calcNoise(fits_fl, fldr, index=0, start=-1, end=1, project=False, band=0):
     fxx.add_colorbar()
     plt.savefig(fldr + 'NoiseMap_mean.png')
 
-def runNoise(fits_fl, outName, Mask=None, label='', index=0, project=True, kernel='Gaussian', kstep=1, isSim=False, band=0, highRes=False, BinMap=None):
-    prefix = 'Output_Plots/WhiteNoise/' + outName
-    HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
-    vecMask = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/masks/rereduced/BandC_polFlux_3.fits')[0]
-    Qmap = HAWC['STOKES Q'].data
-    Umap = HAWC['STOKES U'].data
-    Mask = vecMask.copy()
-    Mask.data = np.ones(vecMask.data.shape)
-
-    noiseMap = WhiteNoiseMap(fits_fl, index, HAWC[0], prefix)
-    hro = h.HRO(noiseMap.data, Qmap, Umap, Mask, vecMask, True, kernel, kstep) 
-    #makePlots(hro, prefix, isSim, label, BinMap)
-    return hro.Zx
-
 def loopNoise(fits_fl, outName, counter, Mask=None, label='', index=0, project=True, kernel='Gaussian', kstep=1, isSim=False, band=0, highRes=False, BinMap=None):
     PRS = []
-    folder = 'Output_Plots/WhiteNoise/' + outName
+    folder = 'Output_Plots/WhiteNoise/BlastPol/' + outName
     for i in range(counter):
         Zx = runNoise(fits_fl, outName, Mask=Mask, label=label, index=index, project=project, kernel=kernel, kstep=kstep, isSim=isSim, band=band, highRes=highRes, BinMap=BinMap)
         PRS.append(Zx)
     np.save(folder + 'PRS_{0}.npy'.format(counter), PRS)
 
+def runNoise(fits_fl, outName, Mask=None, label='', index=0, project=True, kernel='Gaussian', kstep=1, isSim=False, band=0, highRes=False, BinMap=None):
+    prefix = 'Output_Plots/WhiteNoise/BlastPol/' + outName
+    #HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
+    #vecMask = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/masks/rereduced/BandC_polFlux_3.fits')[0]
+    #Qmap = HAWC['STOKES Q'].data
+    #Umap = HAWC['STOKES U'].data
+    Bvec = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/BlastPOL/BLASTPol_500_intermediate_BPOSang.fits')[0]
+    Mask = vecMask.copy()
+    Mask.data = np.ones(vecMask.data.shape)
+
+    noiseMap = WhiteNoiseMap(fits_fl, index, Bvec, prefix)
+    Bmap = projectMap(Bvec, noiseMap) 
+    hro = h.HRO(noiseMap.data, Bmap=Bmap, hdu=Mask, vecMask=vecMask, msk=True, kernel=kernel, kstep=kstep) 
+    #makePlots(hro, prefix, isSim, label, BinMap)
+    return hro.Zx
+
+def WhiteNoiseMap(fits_fl, index, ref, prefix=''):
+    Map = fits.open(fits_fl)[index]
+    mean = np.nanmean(Map.data)
+    std = np.nanstd(Map.data)
+    noise = np.random.normal(mean, std, size=Map.data.shape)
+    noise_full = Map.copy()
+    noise_full.data = noise
+    print(noise_full.data.shape)
+    noise_Map = noise_full
+    #noise_Map = ref.copy()
+    #noise_Map = projectMap(noise_full, ref)
+
+    fig = plt.figure(figsize=[12,8])
+    fxx = aplpy.FITSFigure(noise_Map, figure=fig, slices=[0])
+    fxx.show_colorscale(interpolation='nearest', cmap='binary')
+    plt.savefig(prefix + 'NoiseMap.png')
+    return noise_Map
+
 def WhiteNoise_PRS(outName, counter):
-    folder = 'Output_Plots/WhiteNoise/' + outName
+    folder = 'Output_Plots/WhiteNoise/BlastPol' + outName
     PRS = np.load(folder + 'PRS_{0}.npy'.format(counter))
     print(outName + ' : PRS mean = ', np.mean(PRS))
     print(outName + ' : PRS std = ', np.std(PRS))
 
-def runAnalysis(fits_fl, outName, Mask=None, label='', index=0, project=True, kernel='Gaussian', kstep=1, isSim=False, band=0, highRes=False, file=True, Map=None, BinMap=None):
-    if file:
-        Map = fits.open(fits_fl)[index]
-    else:
-        Map = Map   
+def runAnalysis(Bmap, outName, vecMask=None, Mask=None, label='', index=0, project=True, kernel='Gaussian', kstep=1, isSim=False, band=0, highRes=False, file=True, Map=None, BinMap=None):
+    
+    #Bvec = fits.open(fits_fl)
+    #Bmap = projectMap(bmap, Map) 
+    #Mask = Map.copy()
+    #Mask.data = np.ones(Bmap.shape)
+    Qmap = None
+    Umap = None
 
-    if band==0:
-        fldr = '/BandC/'
-        HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
-        vecMask = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/masks/rereduced/BandC_polFlux_3.fits')[0] 
-        Qmap = HAWC['STOKES Q'].data
-        Umap = HAWC['STOKES U'].data
-        Bmap=None
-
-    elif band==1:
-        fldr = '/BandE/'
-        HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits')
-        vecMask = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/masks/rereduced/BandE_polFlux_3.fits')[0]
-        Qmap = HAWC['STOKES Q'].data
-        Umap = HAWC['STOKES U'].data
-        Bmap=None
-
-    else:
-        fldr = '/BLASTpol/'
-        Bvec = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/BlastPOL/BLASTPol_500_intermediate_BPOSang.fits')
-        Bmap = projectMap(Bvec, Map) 
-        vecMask = Map.copy()
-        vecMask.data = np.ones(Bmap.shape)
-        Qmap = None
-        Umap = None
-
-    # elif band==2:
-    #     fldr = '/BLASTpol/'
-    #     HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits')
-    #     vecMask = 
-    #     Qmap = HAWC['STOKES Q'].data
-    #     Umap = HAWC['STOKES U'].data
-
-    if project: 
-        Map = projectMap(Map, HAWC[0])                        # project map onto HAWC+ WCS map
-
-    elif highRes:
-        Qmap = projectMap(HAWC['STOKES Q'], Map).data
-        Umap = projectMap(HAWC['STOKES U'], Map).data 
-        HAWC_mask = vecMask.copy()
-        vecMask = Map.copy()
-        vecMask.data = projectMap(HAWC_mask, Map) 
-
-    if BinMap is None:
-        prefix='Output_Plots'+ fldr + outName
-    else:
-        prefix='Output_Plots/Bin_Hersch'+ fldr + outName
-
-    if Mask==None:
-        Mask = vecMask.copy()
-        Mask.data = np.ones(vecMask.data.shape)
-
-    # Run HRO analysis without masking data
-    # hro = h.HRO(Map.data, Qmap, Umap, Mask, vecMask, False, kernel, kstep)         
-    # makePlots(hro, prefix, isSim, label)
-
-    # Repeat for masked data 
     if isSim==False:
         hro = h.HRO(Map.data, Qmap=Qmap, Umap=Umap, Bmap=Bmap, hdu=Mask, vecMask=vecMask, msk=True, kernel=kernel, kstep=kstep, BinMap=BinMap)   
-        prefix=prefix + 'MASKED_'    
+        prefix=outName    
     makePlots(hro, prefix, isSim, label, BinMap)
     return hro
 
 def makePlots(hro, prefix, isSim, label, BinMap=None):
     if isSim: scale=15; step=20
-    else: scale=8; step=15
+    else: scale=20; step=20
     if BinMap is None:
         label=label
     else:
         label=label+' Binned to Column Density'
 
+    p.plot_Map(hro, prefix, norm=False)
     p.plot_Fields(hro, prefix, Bfield=True, Efield=True, step=step, scale=scale)
-    p.plot_Map(hro, prefix='', norm=False)
     p.plot_Gradient(hro, prefix, norm=False)
     p.plot_GradientAmp(hro, prefix, norm=True)
     p.plot_vectors(hro, prefix, step=step, scale=scale)
@@ -857,7 +890,7 @@ def makePlots(hro, prefix, isSim, label, BinMap=None):
     p.plot_secthist(hro, label, prefix)
 
 def plotPRS_speed(folder):
-    PRS = np.load(folder + 'PRS_speed.npy')
+    PRS = np.load(folder + '/PRS_speed.npy')
     plt.figure(figsize=[12,8], dpi=200)
     speed = PRS[0]
     stat =  PRS[1]
@@ -872,14 +905,14 @@ def plotPRS_speed(folder):
     plt.ylabel('Projected Rayleigh Statistic')
     plt.xlabel('Speed')
     plt.title('Statistic vs Speed')
-    plt.savefig(folder + 'PRS_speed.png')
+    plt.savefig(folder + '/PRS_speed.png')
     
     plt.figure()
     plt.plot(speed, angle)
     plt.ylabel('Mean Relative Angle')
     plt.xlabel('Speed')
     plt.title('Mean Phi vs Speed')
-    plt.savefig(folder + 'Phi_speed.png')
+    plt.savefig(folder + '/Phi_speed.png')
 
     fig, ax = plt.subplots()
     ax.plot(speed, stat)
@@ -889,7 +922,7 @@ def plotPRS_speed(folder):
     ax2.plot(speed, angle, color='black')
     #ax2.set_ylim(0,90)
     ax2.set_ylabel('Mean Relative Angle')
-    plt.savefig(folder + 'PhiPRS_speed.png')
+    plt.savefig(folder + '/PhiPRS_speed.png')
     #np.save(folder + 'PRS_speed.npy', [speed, stat])
 
 def plotPRS_Bands(cube):
@@ -914,8 +947,8 @@ def plotPRS_Bands(cube):
     plt.savefig(folder + 'BandC/' + cube + 'Cube/PRS_speed_bands.png')
 
 def plotHIST_speed(folder):
-    hists = np.load(folder + 'hist_speed.npy')
-    speed = np.load(folder + 'PRS_speed.npy')[0]
+    hists = np.load(folder + '/hist_speed.npy')
+    speed = np.load(folder + '/PRS_speed.npy')[0]
     print(hists.shape)
     #print(speed[0])
     # hist_array = np.zeros((20, 131))
@@ -932,7 +965,7 @@ def plotHIST_speed(folder):
     plt.xlabel('relative angle')
     plt.ylabel('speed (km/s)')
     plt.title('colormap amplitude is histogram density')
-    plt.savefig(folder + 'hist_summary.png')
+    plt.savefig(folder + '/hist_summary.png')
 
 def totalHIST(folder):
     Phi = np.load(folder + 'total_phi.npy')
@@ -982,201 +1015,9 @@ def projectMap(mapOrigin, ref):
     proj[0].data = proj
     return proj
 
-def WhiteNoiseMap(fits_fl, index, ref, prefix=''):
-    Map = fits.open(fits_fl)[index]
-    mean = np.nanmean(Map.data)
-    std = np.nanstd(Map.data)
-    noise = np.random.normal(mean, std, size=Map.data.shape)
-    noise_full = Map.copy()
-    noise_full.data = noise
-    print(noise_full.data.shape)
-    noise_Map = ref.copy()
-    noise_Map = projectMap(noise_full, ref)
 
-    fig = plt.figure(figsize=[12,8])
-    fxx = aplpy.FITSFigure(noise_Map, figure=fig, slices=[0])
-    fxx.show_colorscale(interpolation='nearest', cmap='binary')
-    plt.savefig(prefix + 'NoiseMap.png')
-    return noise_Map
 
-#ALMACont('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CS_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/13CS/', project=False, start=0, end=13, pdfName='13CS_mom0_cube_ALMAband6.pdf', gifName='N2D_mom0_cube_ALMAband6.gif', band=0)
-# ALMACont('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/CO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/CO/', project=False, start=0, end=13, pdfName='CO_mom0_cube_ALMAband6.pdf', gifName='CO_mom0_cube_ALMAband6.gif', band=0)
-# ALMACont('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/SiO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/SiO/', project=False, start=0, end=13, pdfName='SiO_mom0_cube_ALMAband6.pdf', gifName='SiO_mom0_cube_ALMAband6.gif', band=0)
-# ALMACont('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/C18O_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/C18O/', project=False, start=0, end=13, pdfName='C18O_mom0_cube_ALMAband6.pdf', gifName='C18O_mom0_cube_ALMAband6.gif', band=0)
-# ALMACont('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/H2CO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/H2CO/', project=False, start=0, end=13, pdfName='H2CO_mom0_cube_ALMAband6.pdf', gifName='H2CO_mom0_cube_ALMAband6.gif', band=0)
-# ALMACont('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CN_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/13CN/', project=False, start=0, end=13, pdfName='13CN_mom0_cube_ALMAband6.pdf', gifName='13CN_mom0_cube_ALMAband6.gif', band=0)
-# ALMACont('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/N2D_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/N2D/', project=False, start=-3, end=3, pdfName='N2D_mom0_cube_ALMAband6.pdf', gifName='N2D_mom0_cube_ALMAband6.gif', band=0)
 
-#plotCube('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/SiO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/SiO/', project=False, start=0, end=13, pdfName='mom0_cube_ALMASiO_contoursACA.pdf', gifName='mom0_cube_ALMASiO_contoursACA.gif')
-#runAnalysis(HAWC, outName='HAWC_polI/', Mask=None, label='HAWC+ Band C Polarized I', index=13, project=False, band=0, highRes=False, kstep=2)
-#runAnalysis(HAWE, outName='HAWE_polI/', Mask=None, label='HAWC+ Band E Polarized I', index=13, project=False, band=1, highRes=False, kstep=2)
-
-#plotPRS_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/C18O/')
-#plotPRS_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/13CN/')
-#plotHIST_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/13CN/')
-#plotHIST_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/13CS/')
-#binHerschel()
-#runCube('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', 0)
-#gifCube('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/SiO/', 'DataMask.pdf', 'DataMask.gif')
-#gifCube('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/C18O/', 'hist.pdf', 'hist.gif')
-#runAll()
-#plotCube('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', 0, '13CO_Map.pdf', '13CO_Map.gif', folder='Output_Plots/BandC/13CO/Cube/')
-
-#plotCube('/Users/akankshabij/Document2s/MSc/Research/Data/CO_LarsBonne/CII/07_0077_RCW36_CII_L.fits', folder='Output_Plots/BandE/CII/Cube/', project=True, start=-5, end=17, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif', band=1)
-#calcNoise(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CII/07_0077_RCW36_CII_L.fits', fldr='Output_Plots/BLASTpol/CII/Cube/', start=17, end=22, project=False)
-#runCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CII/07_0077_RCW36_CII_L.fits', folder='Output_Plots/BandC/CII/Cube/', out='CII/Cube/', start=-1, end=16, project=True, highRes=False, band=0)
-#gifCube('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BLASTpol/CII/Cube/')
-#plotPRS_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/CII/Cube/')
-#plotHIST_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BLASTpol/CII/Cube/')
-# plotPRS_Bands('CII/')
-# plotPRS_Bands('12CO/')
-# plotPRS_Bands('13CO/')
-# plotPRS_Bands('Mopra/')
-#totalHIST('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/CII/Cube/')
-
-#plotCube('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_12CO32.fits', folder='Output_Plots/BandE/12CO/Cube/', project=True, start=-3, end=17, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif', band=1)
-# plotCube('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/O/RCW36_OI_30_15.fits', folder='Output_Plots/BandC/OI/Cube/', project=True, start=-3, end=17, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif', band=0)
-# plotCube('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/O/RCW36_OI_30_15.fits', folder='Output_Plots/BLASTpol/OI/Cube/', project=False, start=-3, end=17, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif', band=2)
-# plotCube('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/O/RCW36_OI_30_15.fits', folder='Output_Plots/BandE/OI/Cube/', project=True, start=-3, end=17, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif', band=1)
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_12CO32.fits', folder='Output_Plots/BandC/12CO/Cube/', project=True, start=-3, end=17, pdfName='12CO_mom0_cube_1kms.pdf', gifName='12CO_mom0_cube_1kms.gif', band=0)
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', folder='Output_Plots/BandC/13CO/Cube/', project=True, start=-3, end=17, pdfName='13CO_mom0_cube_1kms.pdf', gifName='13CO_mom0_cube_1kms.gif', band=0)
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CII/07_0077_RCW36_CII_L.fits', folder='Output_Plots/BandC/CII/Cube/', project=True, start=-3, end=17, pdfName='CII_mom0_cube_1kms.pdf', gifName='CII_mom0_cube_kms.gif', band=0)
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CS_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/13CS/', project=False, start=0, end=13, pdfName='mom0_cube_ALMA13CS.pdf', gifName='mom0_cube_ALMA13CS.gif')
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/CO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/CO/', project=False, start=0, end=13, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif')
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/SiO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/SiO/', project=False, start=0, end=13, pdfName='mom0_cube_ALMASiO.pdf', gifName='mom0_cube_ALMASiO.gif')
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/C18O_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/C18O/', project=False, start=0, end=13, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif')
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/H2CO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/H2CO/', project=False, start=0, end=13, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif')
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CN_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/13CN/', project=False, start=0, end=13, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif')
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/N2D_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/N2D/', project=False, start=-3, end=3, pdfName='mom0_cube_ALMA.pdf', gifName='mom0_cube_ALMA.gif')
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', folder='Output_Plots/BandC/13CO/Cube/', project=True, start=-3, end=17, pdfName='13CO_mom0_cube_1kms.pdf', gifName='13CO_mom0_cube_kms.gif', band=0)
-# mom0_1km('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CII/07_0077_RCW36_CII_L.fits', folder='Output_Plots/BandC/CII/Cube/', project=True, start=-3, end=17, pdfName='CII_mom0_cube_1kms.pdf', gifName='CII_mom0_cube_kms.gif', band=0)
-
-#ALMACont('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', folder='Output_Plots/BandC/13CO/Cube/', project=True, start=-3, end=17, pdfName='13CO_mom0_ALMA13CS.pdf', gifName='13CO_mom0_ALMA13CS.gif', band=0)
-# calcNoise(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_12CO32.fits', fldr='Output_Plots/BandE/12CO/Cube/', start=-3, end=-1, project=True, band=1)
-#runCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_12CO32.fits', folder='Output_Plots/BandC/12CO/Cube/', out='12CO/Cube/', start=-2, end=17, project=True, highRes=False, band=0)
-#gifCube('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/12CO/Cube/')
-#plotPRS_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/12CO/Cube/')
-#plotHIST_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/12CO/Cube/')
-#totalHIST('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/12CO/Cube/')
-
-#plotCube('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', folder='Output_Plots/BandE/13CO/Cube/', project=True, start=-3, end=17, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif', band=1)
-# calcNoise(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', fldr='Output_Plots/BLASTpol/13CO/Cube/', start=-3, end=0, project=False)
-# runCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', folder='Output_Plots/BLASTpol/13CO/Cube/', out='13CO/Cube/', start=-2, end=17, project=False, highRes=False, band=2)
-# gifCube('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BLASTpol/13CO/Cube/')
-# plotPRS_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BLASTpol/13CO/Cube/')
-# plotHIST_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BLASTpol/13CO/Cube/')
-
-# plotCube('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', folder='Output_Plots/BandC/13CO/Cube/', project=True, start=-3, end=17, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif', band=0)
-# calcNoise(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', fldr='Output_Plots/BandC/13CO/Cube/', start=-3, end=0, project=True, band=0)
-# runCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', folder='Output_Plots/BandC/13CO/Cube/', out='13CO/Cube/', start=-2, end=17, project=True, highRes=False, band=0)
-# gifCube('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/13CO/Cube/')
-# plotPRS_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/13CO/Cube/')
-# plotHIST_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/13CO/Cube/')
-# totalHIST('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/13CO/Cube/')
-
-# plotCube('/Users/akankshabij/Documents/MSc/Research/Data/Mopra/HNC_3mm_Vela_C_T_MB.fits', folder='Output_Plots/BandC/Mopra/Cube/', project=True, start=-3, end=17, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif', band=0)
-# calcNoise(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/Mopra/HNC_3mm_Vela_C_T_MB.fits', fldr='Output_Plots/BandC/Mopra/Cube/', start=-3, end=-1, project=True, band=0)
-# runCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/Mopra/HNC_3mm_Vela_C_T_MB.fits', folder='Output_Plots/BandC/Mopra/Cube/', out='Mopra/Cube/', start=-2, end=17, project=True, highRes=False, band=0)
-# gifCube('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/Mopra/Cube/')
-# plotPRS_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/Mopra/Cube/')
-# plotHIST_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/Mopra/Cube/')
-# totalHIST('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/Mopra/Cube/')
-
-# runMaskCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CN_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/13CN/', out='ALMA/cubes/13CN/', regions=[[150, 70], [40, 100], [180, 380], [230, 200]], start=0, end=13, project=False, highRes=True, band=0)
-# gifCube(fldr='Output_Plots/BandC/ALMA/cubes/13CN/')
-# plotPRS_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/13CN/')
-# plotHIST_speed('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/13CN/')
-# totalHIST('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/13CN/')
-#runAnalysis(fits_fl='Data/Observations/CII_Integrated.fits', outName='CII/', index=0, project=False, kernel='Gaussian', kstep=3, isSim=False, band=2, highRes=False, file=True, Map=None, BinMap=None)
-#plotCube('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/CO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/CO/', project=False, start=0, end=13, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif')
-#plotCube('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/H2CO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/H2CO/', project=False, start=0, end=13, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif')
-#plotCube('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CN_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/13CN/', project=False, start=0, end=13, pdfName='mom0_cube.pdf', gifName='mom0_cube.gif')
-#plotCube('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/N2D_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/N2D/', project=False, start=-3, end=3, pdfName='mom0_cube_ALMA.pdf', gifName='mom0_cube_ALMA.gif')
-#plotCube('/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CS_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/13CS/', project=False, start=0, end=13, pdfName='mom0_cube_ALMA.pdf', gifName='mom0_cube_ALMA.gif')
-#runMaskCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/ALMA/N2D_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/N2D/', out='ALMA/cubes/N2D/', regions=[[150, 70], [40, 100], [180, 380], [230, 200]], start=-3, end=3, project=False, highRes=True, band=0)
-# gifCube(fldr='Output_Plots/BandC/ALMA/cubes/N2D/')
-# plotPRS_speed('Output_Plots/BandC/ALMA/cubes/N2D/')
-# plotHIST_speed('Output_Plots/BandC/ALMA/cubes/N2D/')
-# totalHIST('Output_Plots/BandC/ALMA/cubes/N2D/')
-#calcNoise(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/ALMA/CO_Cube.fits', fldr='Output_Plots/BandC/ALMA/cubes/CO/', start=-9, end=-7)
-#calcNoise(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/ALMA/C18O_Cube.fits', fldr='Output_Plots/BandC/ALMA/cubes/C18O/', start=0, end=2)
-#runCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/ALMA/SiO_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/SiO/', out='ALMA/cubes/SiO/', start=0, end=13)
-#gifCube('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/SiO/')
-#runCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/ALMA/C18O_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/C18O/', out='ALMA/cubes/C18O/', start=0, end=13)
-#runCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/ALMA/13CN_Cube.fits', folder='Output_Plots/BandC/ALMA/cubes/13CN/', out='ALMA/cubes/13CN/', start=0, end=13)
-#gifCube('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/ALMA/cubes/13CN/')
-#runBinHersch()
-#runCube(fits_fl='/Users/akankshabij/Documents/MSc/Research/Data/ALMA/Cycle8/VelaC_CR1_12m_C43_Band6_12CO_cube.fits', folder='Output_Plots/BandC/ALMA/cubes/Cycle8/12CO/', out='ALMA/cubes/Cycle8/12CO/', project=False, start=0, end=13, band=0)
-#calcNoise('/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_13CO32.fits', 0, fldr='Output_Plots/BandC/13CO/Cube/', start=-1, end=2)
-#runChannelMaps(fl='/Users/akankshabij/Documents/MSc/Research/Data/CO_LarsBonne/CO/RCW36_12CO32.fits', fldr='12CO/')
-#runNoise('Data/Observations/Herschel_ColumnDensity.fits', outName='ColumnDensity/', label='Herschel Column Density', index=1, project=True, kernel='Gaussian', kstep=5, isSim=False, band=0, highRes=False)
-
-# loopNoise('Data/Observations/Herschel_ColumnDensity.fits', outName='ColumnDensity/', counter=10, label='Herschel Column Density', index=1, kstep=5)
-# loopNoise('Data/Observations/Hershel_Temperature.fits', outName='Temperature/', counter=10, label='Herschel Temperature', kstep=5)
-# loopNoise('Data/Observations/12CO_Integrated.fits', outName='12CO/', counter=10, label='12CO', kstep=2)
-# loopNoise('Data/Observations/13CO_Integrated.fits', outName='13CO/', counter=10, label='13CO', kstep=2)
-# loopNoise('Data/Observations/CII_Integrated.fits',  outName='CII/',  counter=10, label='CII',  kstep=2)
-# loopNoise('Data/Observations/ALMA_Band6_continuum.fits', outName='ALMA/', counter=10, label='ALMA Band 6 Continuum', kstep=1)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/Mopra/Integrated_mom0_0to12kmpers.fits', outName='Mopra/', counter=10, label='Mopra HNC', kstep=5)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits', outName='Highres_ColumnDensity/', counter=10, label='Highres Herschel Column Density', kstep=5)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresTmap_velac_temperature_cf_r500_medsmo3.fits', outName='Highres_Temperature/', counter=10, label='Highres Herschel Temperature', kstep=5)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits', outName='HAWC_BandC/', counter=10, label='HAWC Band C Intensity', kstep=1)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits', outName='HAWC_BandE/', counter=10, label='HAWC Band E Intensity', kstep=1)
-
-# loopNoise('Data/Observations/Herschel_ColumnDensity.fits', outName='ColumnDensity/', counter=100, label='Herschel Column Density', index=1, kstep=5)
-# loopNoise('Data/Observations/Hershel_Temperature.fits', outName='Temperature/', counter=100, label='Herschel Temperature', kstep=5)
-# loopNoise('Data/Observations/12CO_Integrated.fits', outName='12CO/', counter=100, label='12CO', kstep=2)
-# loopNoise('Data/Observations/13CO_Integrated.fits', outName='13CO/', counter=100, label='13CO', kstep=2)
-# loopNoise('Data/Observations/CII_Integrated.fits',  outName='CII/',  counter=100, label='CII',  kstep=2)
-# loopNoise('Data/Observations/ALMA_Band6_continuum.fits', outName='ALMA/', counter=100, label='ALMA Band 6 Continuum', kstep=1)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/Mopra/Integrated_mom0_0to12kmpers.fits', outName='Mopra/', counter=100, label='Mopra HNC', kstep=5)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits', outName='Highres_ColumnDensity/', counter=100, label='Highres Herschel Column Density', kstep=5)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresTmap_velac_temperature_cf_r500_medsmo3.fits', outName='Highres_Temperature/', counter=100, label='Highres Herschel Temperature', kstep=5)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits', outName='HAWC_BandC/', counter=100, label='HAWC Band C Intensity', kstep=1)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits', outName='HAWC_BandE/', counter=100, label='HAWC Band E Intensity', kstep=1)
-
-# loopNoise('Data/Observations/Herschel_ColumnDensity.fits', outName='ColumnDensity/', counter=1000, label='Herschel Column Density', index=1, kstep=5)
-# loopNoise('Data/Observations/Hershel_Temperature.fits', outName='Temperature/', counter=1000, label='Herschel Temperature', kstep=5)
-# loopNoise('Data/Observations/12CO_Integrated.fits', outName='12CO/', counter=1000, label='12CO', kstep=2)
-# loopNoise('Data/Observations/13CO_Integrated.fits', outName='13CO/', counter=1000, label='13CO', kstep=2)
-# loopNoise('Data/Observations/CII_Integrated.fits',  outName='CII/',  counter=1000, label='CII',  kstep=2)
-# loopNoise('Data/Observations/ALMA_Band6_continuum.fits', outName='ALMA/', counter=1000, label='ALMA Band 6 Continuum', kstep=1)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/Mopra/Integrated_mom0_0to12kmpers.fits', outName='Mopra/', counter=1000, label='Mopra HNC', kstep=5)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits', outName='Highres_ColumnDensity/', counter=1000, label='Highres Herschel Column Density', kstep=5)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresTmap_velac_temperature_cf_r500_medsmo3.fits', outName='Highres_Temperature/', counter=1000, label='Highres Herschel Temperature', kstep=5)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits', outName='HAWC_BandC/', counter=1000, label='HAWC Band C Intensity', kstep=1)
-# loopNoise('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits', outName='HAWC_BandE/', counter=1000, label='HAWC Band E Intensity', kstep=1)
-
-# WhiteNoise_PRS(outName='ColumnDensity/', counter=1000)
-# WhiteNoise_PRS(outName='Temperature/', counter=1000)
-# WhiteNoise_PRS(outName='12CO/', counter=1000)
-# WhiteNoise_PRS(outName='13CO/', counter=1000)
-# WhiteNoise_PRS(outName='CII/', counter=1000)
-# WhiteNoise_PRS(outName='ALMA/', counter=1000)
-# WhiteNoise_PRS(outName='Mopra/', counter=1000)
-# WhiteNoise_PRS(outName='Highres_ColumnDensity/', counter=1000)
-# WhiteNoise_PRS(outName='Highres_Temperature/', counter=1000)
-# WhiteNoise_PRS(outName='HAWC_BandC/', counter=1000)
-# WhiteNoise_PRS(outName='HAWC_BandE/', counter=1000)
-
-# HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
-# Nmap = 'Data/Observations/Herschel_ColumnDensity.fits'
-# WhiteNoiseMap(Nmap, 1, HAWC[0], 'Output_Plots/WhiteNoise/ColumnDensity/')
-#Load in simulation data
-# Athena = fits.open('Data/Simulations/StrongBField/L1M10_Q.fits')
-# Athena_mask = Athena[0].copy()
-# Athena_mask.data = np.ones(Athena_mask.shape)
-# Athena_col = fits.open('Data/Simulations/StrongBField/L1M10_colN.fits')[0]
-# Qmap = (Athena[0]).data
-# Umap = (fits.open('Data/Simulations/StrongBField/L1M10_U.fits')[0]).data
-# hro = h.HRO(Athena_col.data, Qmap, Umap, hdu=Athena_mask, vecMask=Athena_mask, msk=True)   
-# prefix = 'Output_Plots/BandC/Athena/StrongBField/'
-# makePlots(hro, prefix, isSim=True, label='')
-#Athena_StrongB = runAnalysis('Data/Simulations/StrongBField/L1M10_colN.fits',  outName='Athena/StrongBField/', project=False, Mask=Athena_mask, isSim=True, label='Athena - Strong Field')  
-
-# Qmap = (fits.open('Data/Simulations/SuperAlfvenic/L10_Q.fits')[0]).data
-# Umap = (fits.open('Data/Simulations/SuperAlfvenic/L10_U.fits')[0]).data
-# Athena_SuperAlf = runAnalysis('Data/Simulations/SuperAlfvenic/L10_colN.fits',  prefix='Output_Plots/Athena/SuperAlfvenic/', project=False, Mask=Athena_mask, isSim=True, label='Athena - Super Alfvenic')  
 
 
 

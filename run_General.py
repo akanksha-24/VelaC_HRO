@@ -872,7 +872,7 @@ def runAnalysis(Bmap, outName, vecMask=None, Mask=None, label='', index=0, proje
 
 def makePlots(hro, prefix, isSim, label, BinMap=None):
     if isSim: scale=15; step=20
-    else: scale=20; step=20
+    else: scale=5; step=6
     if BinMap is None:
         label=label
     else:

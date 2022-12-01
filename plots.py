@@ -7,8 +7,11 @@ from astropy.io import fits
 from reproject import reproject_interp, reproject_exact
 from matplotlib import cm
 #import run as r
+import HRO as h
 
+#folder = '/Users/akankshabij/Documents/MSc/Research/Data/'
 Hersch = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits')[0]
+#HAWC = fits.open(folder + 'HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
 
 def projectMap(mapOrigin, ref):
     '''This function projects a given map 'mapOrigin' onto the same WCS coordinates as a reference map and returns the map in the same shape'''
@@ -58,19 +61,52 @@ def plot_Fields(hro, prefix='', Bfield=True, Efield=False, step=12, scale=8):
 def plot_Map(hro, prefix='', norm=False):
     '''hro is an HRO class object as defined in HRO.py'''
 
-    Map = hro.hdu.copy()
-    Map.data = hro.unmasked_Map
-
-    Map_smooth = hro.hdu.copy()
-    Map_smooth.data = hro.Map
+    plt.close('all')
+    fig = plt.figure(figsize=[5,4], dpi=300)
+    fxx = aplpy.FITSFigure(hro.Map_full, figure=fig, slices=[0])
+    fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
+    #fxx.recenter(134.87,-43.74, height=0.15, width=0.15)
+    #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    fxx.add_colorbar()
+    plt.savefig(prefix+'Map_full.png')
 
     plt.close('all')
     fig = plt.figure(figsize=[5,4], dpi=300)
-    fxx = aplpy.FITSFigure(Map, figure=fig, slices=[0])
+    fxx = aplpy.FITSFigure(hro.Map, figure=fig, slices=[0])
     fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
     #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
     fxx.add_colorbar()
-    plt.savefig(prefix+'Map.png')
+    plt.savefig(prefix+'Map_proj.png')
+
+    fig = plt.figure(figsize=[5,4], dpi=300)
+    fxx = aplpy.FITSFigure(hro.dMdx_full, figure=fig, slices=[0])
+    fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
+    #fxx.recenter(134.87,-43.74, height=0.15, width=0.15)
+    #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    fxx.add_colorbar()
+    plt.savefig(prefix+'Mapx_smooth.png')
+
+    fig = plt.figure(figsize=[5,4], dpi=300)
+    fxx = aplpy.FITSFigure(hro.dMdy_full, figure=fig, slices=[0])
+    fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
+    #fxx.recenter(134.87,-43.74, height=0.15, width=0.15)
+    #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    fxx.add_colorbar()
+    plt.savefig(prefix+'Mapy_smooth.png')
+
+    fig = plt.figure(figsize=[5,4], dpi=300)
+    fxx = aplpy.FITSFigure(hro.dMdx_proj, figure=fig, slices=[0])
+    fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
+    #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    fxx.add_colorbar()
+    plt.savefig(prefix+'Mapx_proj.png')
+
+    fig = plt.figure(figsize=[5,4], dpi=300)
+    fxx = aplpy.FITSFigure(hro.dMdy_proj, figure=fig, slices=[0])
+    fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
+    #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    fxx.add_colorbar()
+    plt.savefig(prefix+'Mapy_proj.png')
 
     # plt.close('all')
     # fig = plt.figure(figsize=[5,4], dpi=300)
@@ -152,16 +188,20 @@ def plot_vectors(hro, prefix='', step=20, scale=10):
     #fxx.set_title('Comparing the contour and magnetic field orientation')
     plt.savefig(prefix+'relative_vectors.png')
 
-def plot_phi(hro, prefix='', label='', norm=False, step=12, scale=8):
+def plot_phi(hro, prefix='', label='', norm=False, step=5, scale=4):
     '''hro is an HRO class object as defined in HRO.py'''
-    Map = hro.vecMask.copy()
-    Map.data = hro.unmasked_Map
+    # Map = hro.vecMask.copy()
+    # Map.data = hro.unmasked_Map
 
     phi = hro.vecMask.copy()
     phi.data = (hro.phi * u.rad).to(u.deg)
 
+    phi_proj = h.projectMap(phi, hro.hdu)
+
     Bfield = hro.vecMask.copy()
     Bfield.data = hro.Bfield
+    Bfield_proj = h.projectMap(Bfield, hro.hdu)
+    vecMask_proj = h.projectMap(hro.vecMask, hro.hdu)
 
     #Hersch = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits')[0]
 
@@ -173,11 +213,14 @@ def plot_phi(hro, prefix='', label='', norm=False, step=12, scale=8):
 
     plt.close('all')
     fig = plt.figure(figsize=[5,4], dpi=300)
+    #fxx = aplpy.FITSFigure(phi_proj, figure=fig, slices=[0], figsize=[12,8])
     fxx = aplpy.FITSFigure(phi, figure=fig, slices=[0], figsize=[12,8])
     fxx.show_colorscale(vmin=0, vmax=90, cmap='Spectral')
-    fxx.show_vectors(hro.vecMask, Bfield, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2.5)
-    fxx.show_vectors(hro.vecMask, Bfield, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1.8)
-    #fxx.show_contour(Hersch, levels=[20,50,80], colors='black')
+    #fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2) #linewidth=2.5)
+    # fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
+    fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2) #linewidth=2.5)
+    fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
+    fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
     #fxx.show_vectors(hro.hdu, hro.Bfield2, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1)
     #fxx.show_contour(Map, levels=hro.sections[-3:-1], cmap='plasma')
     # print(np.nanmin(Map.data) + np.nanstd(Map.data))
@@ -320,3 +363,4 @@ def plot_FEWsect(hro, label, prefix=''):
     plt.legend(fontsize=11)
     #plt.subplots_adjust(top=0.9,bottom=0.2,left=0.15,right=0.75)
     plt.savefig(prefix+'phi_3Sects.png')
+

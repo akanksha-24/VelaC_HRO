@@ -16,7 +16,7 @@ class HRO:
 
         # Initialize
         self.Map_full = Map if Map is None else Map.copy()
-        self.Map = Map.copy().data if ((Qmap is None)==False) else projectMap(Map, Bmap).data                                             # Original data before masking
+        self.Map = self.Map_full.data if ((Qmap is None)==False) else projectMap(Map, Bmap).data                                             # Original data before masking
         self.Qmap = Qmap if Qmap is None else Qmap.copy()
         self.Umap = Umap if Umap is None else Umap.copy()
         self.Bmap = Bmap if Bmap is None else Bmap.copy()
@@ -31,6 +31,10 @@ class HRO:
         #     self.Qmap[np.argwhere(hdu.data == 0)] = np.nan
         #     self.Umap[np.argwhere(hdu.data == 0)] = np.nan
 
+         # conver to radians
+        if (Bmap is None)==False and np.nanmax(self.Bmap.data) > np.pi*2:
+                self.Bmap.data = ((self.Bmap.data)*u.deg).to(u.rad).value 
+
         # Perform HRO analysis:
         if compare==False:
             self.HROanalysis(convention, msk, hdu, vecMask, gstep, kstep, kernel, histbins, Bproj)
@@ -40,27 +44,32 @@ class HRO:
 
 
     def HROanalysis(self, convention, msk, hdu, vecMask, gstep, kstep, kernel, histbins, Bproj):
+
+        self.dMdx_full = self.Map_full.copy()
+        self.dMdx_full.data = ndimage.filters.gaussian_filter(self.Map_full.data, [kstep, kstep], order=[1,0], mode='nearest')
+        self.dMdy_full = self.Map_full.copy()
+        self.dMdy_full.data = ndimage.filters.gaussian_filter(self.Map_full.data, [kstep, kstep], order=[0,1], mode='nearest')
         
         # 1. Smooth Map
         # To avoid convovling NaN's (use two sub-arrays) : https://stackoverflow.com/questions/18697532/gaussian-filtering-a-image-with-nan-in-python
         
-        self.dMdx_full = self.Map_full.copy()
-        V = self.dMdx_full.data.copy()
-        V[np.isnan(self.dMdx_full.data)]=0
-        VV_x = ndimage.filters.gaussian_filter(V, [kstep, kstep], order=[1,0], mode='nearest')
-        W = 0*self.dMdx_full.data.copy() + 1
-        W[np.isnan(self.dMdx_full.data)]=0
-        WW_x = ndimage.filters.gaussian_filter(W, [kstep, kstep], order=[0,0], mode='nearest')
-        self.dMdx_full.data = VV_x / WW_x
+        # self.dMdx_full = self.Map_full.copy()
+        # V = self.dMdx_full.data.copy()
+        # V[np.isnan(self.dMdx_full.data)]=0
+        # VV_x = ndimage.filters.gaussian_filter(V, [kstep, kstep], order=[1,0], mode='nearest')
+        # W = 0*self.dMdx_full.data.copy() + 1
+        # W[np.isnan(self.dMdx_full.data)]=0
+        # WW_x = ndimage.filters.gaussian_filter(W, [kstep, kstep], order=[0,0], mode='nearest')
+        # self.dMdx_full.data = VV_x / WW_x
 
-        self.dMdy_full = self.Map_full.copy()
-        V = self.dMdy_full.data.copy()
-        V[np.isnan(self.dMdy_full.data)]=0
-        VV_y = ndimage.filters.gaussian_filter(V, [kstep, kstep], order=[0,1], mode='nearest')
-        W = 0*self.dMdy_full.data.copy() + 1
-        W[np.isnan(self.dMdy_full.data)]=0
-        WW_y = ndimage.filters.gaussian_filter(W, [kstep, kstep], order=[0,0], mode='nearest')
-        self.dMdy_full.data = VV_y / WW_y
+        # self.dMdy_full = self.Map_full.copy()
+        # V = self.dMdy_full.data.copy()
+        # V[np.isnan(self.dMdy_full.data)]=0
+        # VV_y = ndimage.filters.gaussian_filter(V, [kstep, kstep], order=[0,1], mode='nearest')
+        # W = 0*self.dMdy_full.data.copy() + 1
+        # W[np.isnan(self.dMdy_full.data)]=0
+        # WW_y = ndimage.filters.gaussian_filter(W, [kstep, kstep], order=[0,0], mode='nearest')
+        # self.dMdy_full.data = VV_y / WW_y
 
         # Check that input is in desired format:
         if (self.Qmap is None)==False:
@@ -104,10 +113,6 @@ class HRO:
             self.dMdy = self.dMdy_proj.data
         
         else: 
-             # conver to radians
-            if np.nanmax(self.Bmap.data) > np.pi*2:
-                self.Bmap.data = ((self.Bmap.data)*u.deg).to(u.rad).value 
-
             # 2. Project Map
             if Bproj==False:
                 self.dMdx_proj = projectMap(self.dMdx_full, self.Bmap)
@@ -293,16 +298,18 @@ class HRO:
         
     def CompareVectors(self, convention, msk, hdu, vecMask, gstep, kstep, kernel, histbins, Qmap2, Umap2):
         # Band E
-        self.Qmap2 = Qmap2
-        self.Umap2 = Umap2
+        self.Qmap2 = projectMap(Qmap2, self.Qmap).data
+        self.Umap2 = projectMap(Umap2, self.Umap).data
+        self.Qmap = self.Qmap.data
+        self.Umap = self.Umap.data
 
         #Smooth Band C to resolution of Band E
         #size = self.getSmoothingSize(old=7.8, new=18.2)                   # FWHM sizes of Bend C and Band E from : https://www.sofia.usra.edu/science/proposing-and-observing/sofia-observers-handbook-cycle-6/8-hawc/81-specifications#Table%208-1
         #size = self.getSmoothingSize(old=4.02, new=9.37)
         #print('size is ', size)
-        size=4
-        self.Qmap = self.SmoothKernel(data=self.Qmap, size=size, type='Gaussian')
-        self.Umap = self.SmoothKernel(data=self.Umap, size=size, type='Gaussian')
+        #size=4
+        #self.Qmap = self.SmoothKernel(data=self.Qmap, size=size, type='Gaussian')
+        #self.Umap = self.SmoothKernel(data=self.Umap, size=size, type='Gaussian')
 
         # fig = plt.figure(figsize=[12,8])
         # fxx = aplpy.FITSFigure(self.Umap, figure=fig)
@@ -327,15 +334,6 @@ class HRO:
         # fxx.show_colorscale(vmax=0.2, vmin=-0.2)
         # fxx.add_colorbar()
         # plt.savefig('/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/BandC/FieldComparison/Smoothed/Umap_BandE.png')
-
-        if msk==True:
-            for i in range(hdu.data.shape[0]):
-                for j in range(hdu.data.shape[1]):
-                    if hdu.data[i,j]==0 or vecMask.data[i,j]==0:
-                        self.Qmap[i,j]=np.nan
-                        self.Umap[i,j]=np.nan
-                        self.Qmap2[i,j]=np.nan
-                        self.Umap2[i,j]=np.nan
 
         if convention==1:                                                             # Standard convention used for most polarization data 
             self.Efield = 0.5*np.arctan2(self.Umap,self.Qmap)                         # Use 4-quadrant arctan, gives result in radians
@@ -362,32 +360,49 @@ class HRO:
         self.dot   = ((self.Bx2)*(self.Bx) + (self.By2)*(self.By))                    # normalized dot product between B-field and contour (note: x and y of gradient flipped for contour direction)
         self.cross = ((self.Bx2)*(self.By) - (self.By2)*(self.Bx))                    # normalized cross product between B-field and contour
         self.phi = np.arctan2(np.abs(self.cross), self.dot)                           # relative angle phi as defined in report, ranges from 0 to 180 deg
+
+        if msk==True:
+            for i in range(self.vecMask.data.shape[0]):
+                for j in range(self.vecMask.data.shape[1]):
+                    if (self.vecMask.data[i,j]!=1): 
+                        self.phi[i,j]=np.nan
         
-        # Caluclate Rayleigh Statistic 
         self.Zx = self.RayleighStatistic(self.phi)
 
         # Wrap phi angle
         self.phi[self.phi > np.pi/2] = np.pi - self.phi[self.phi > np.pi/2]           # wrap angle so now it ranges from 0 to 90 deg (as relative angle phi=85 is the same as phi=95)
+
+        # Calculate Mean relative angle
+        self.MeanPhi()
         
         # Make full phi histogram
         self.hist, self.bin_edges = np.histogram(self.phi, bins=histbins, range=(0, np.pi/2), density=True)
 
-        #Use percentile to split
+        # Use percentile to split
         partitions = 5
         percentile = [(100/partitions)*(i+1) for i in range(partitions)]
-        self.sections = np.nanpercentile(self.Map, percentile)
+        self.sections = np.nanpercentile(self.BinMap, percentile)
         print(self.sections)
-        digitized = np.digitize(self.Map, self.sections)
-        phi_sections = [self.phi[digitized == i] for i in range(partitions)]
+        try:
+            self.digitized = np.digitize(self.BinMap, self.sections)
+        except:
+            self.digitized = np.digitize(self.BinMap, [self.sections[i]*i for i in range(len(self.sections))]) # to avoid monotonically increasing error
+        # print('digitized shape ', digitized.shape)
+        # print(np.min(digitized))
+        # print(np.max(digitized))
+        phi_sections = [self.phi[self.digitized == i] for i in range(partitions)]
         print(phi_sections[0].shape)
         print(phi_sections[2].shape)
         self.nvectors = [phi_sect.shape[0] for phi_sect in phi_sections]
+        # print(phi_1.shape)
+        # print(phi_2.shape)
+        # print(phi_3.shape)
         self.hist_array = []; self.bin_edges_array = []
         for phi_sect in phi_sections:
             hist_, bin_edges_ = np.histogram(phi_sect, bins=histbins, range=(0, np.pi/2), density=True)
             self.hist_array.append(hist_)
             self.bin_edges_array.append(bin_edges_)
-
+            
     def RayleighStatistic(self, angles, weights=None):
         # angles needs to be on domain (-pi/2, pi/2) (input parameter theta is 2*phi 
         theta = np.arctan(np.tan(angles))*2
@@ -493,7 +508,7 @@ def projectMap(mapOrigin, ref):
     '''This function projects a given map 'mapOrigin' onto the same WCS coordinates as a reference map and returns the map in the same shape'''
     New = ref.copy()
     proj, footprint = reproject_exact(mapOrigin, ref.header)
-    proj[np.isnan(ref.data)] = np.nan
+    #proj[np.isnan(ref.data)] = np.nan
     proj[0].data = proj
     New.data = proj
     return New

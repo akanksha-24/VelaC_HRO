@@ -24,7 +24,7 @@ def plot_Fields(hro, prefix='', Bfield=True, Efield=False, step=12, scale=8):
     '''This function plots the B-field and E-field, used for debugging purposes to make sure the result is as expected'''
     
     # Use fits header information to get maps in WCS coordinates
-    Map = hro.hdu.copy()
+    Map = hro.Map_full.copy()
     Map.data = hro.Map
     B_hdr = hro.hdu.copy()                                 
     B_hdr.data = hro.Bfield
@@ -168,11 +168,11 @@ def plot_GradientAmp(hro, prefix='', norm=False):
 
 def plot_vectors(hro, prefix='', step=20, scale=10):
     ''''''
-    Map = hro.hdu.copy()
+    Map = hro.Map_full.copy()
     Map.data = hro.Map
-    Bfield = hro.hdu.copy()
-    Bfield.data = hro.Bfield
-    cont = hro.hdu.copy()
+    Bfield = hro.Bmap.copy()
+    #Bfield.data = hro.Bfield
+    cont = hro.Map_full.copy()
     cont.data = hro.contour
 
     plt.close('all')
@@ -216,10 +216,10 @@ def plot_phi(hro, prefix='', label='', norm=False, step=5, scale=4):
     #fxx = aplpy.FITSFigure(phi_proj, figure=fig, slices=[0], figsize=[12,8])
     fxx = aplpy.FITSFigure(phi, figure=fig, slices=[0], figsize=[12,8])
     fxx.show_colorscale(vmin=0, vmax=90, cmap='Spectral')
-    #fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2) #linewidth=2.5)
-    # fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
-    fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2) #linewidth=2.5)
-    fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
+    fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2) #linewidth=2.5)
+    fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
+    #fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2) #linewidth=2.5)
+    #fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
     fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
     #fxx.show_vectors(hro.hdu, hro.Bfield2, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1)
     #fxx.show_contour(Map, levels=hro.sections[-3:-1], cmap='plasma')
@@ -240,7 +240,7 @@ def plot_regions(hro, prefix='', norm=False, step=12, scale=8):
     #HAWC = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
     #digitized.data[np.isnan(hro.Map)]=np.nan
 
-    phi = hro.hdu.copy()
+    phi = hro.Map_full.copy()
     phi.data = (hro.phi * u.rad).to(u.deg)
 
     plt.close('all')

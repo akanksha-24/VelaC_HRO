@@ -889,6 +889,25 @@ def makePlots(hro, prefix, isSim, label, BinMap=None):
     #p.plot_FEWsect(hro, label, prefix)
     p.plot_secthist(hro, label, prefix)
 
+def makePlots_Compare(hro, prefix, isSim, label, BinMap=None):
+    if isSim: scale=15; step=20
+    else: scale=5; step=6
+    if BinMap is None:
+        label=label
+    else:
+        label=label+' Binned to Column Density'
+
+    #p.plot_Map(hro, prefix, norm=False)
+    p.plot_Fields(hro, prefix, Bfield=True, Efield=True, step=step, scale=scale)
+    #p.plot_Gradient(hro, prefix, norm=False)
+    #p.plot_GradientAmp(hro, prefix, norm=True)
+    #p.plot_vectors(hro, prefix, step=step, scale=scale)
+    #p.plot_regions(hro, prefix, step=step, scale=scale)
+    p.plot_phi(hro, prefix, step=step, scale=scale, label=label)
+    p.plot_histShaded(hro, label, prefix)
+    #p.plot_FEWsect(hro, label, prefix)
+    p.plot_secthist(hro, label, prefix)
+
 def plotPRS_speed(folder):
     PRS = np.load(folder + '/PRS_speed.npy')
     plt.figure(figsize=[12,8], dpi=200)

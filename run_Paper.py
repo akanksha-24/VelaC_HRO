@@ -14,17 +14,30 @@ import matplotlib.pyplot as plt
 # import maps
 folder = '/Users/akankshabij/Documents/MSc/Research/Data/'
 HAWC = fits.open(folder + 'HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
-HAWE = fits.open(folder + 'HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits')
+HAWC_Q = HAWC['STOKES Q']
+HAWC_U = HAWC['STOKES U']
 vecMask_C = fits.open(folder + 'HAWC/masks/rereduced/BandC_polFlux_3.fits')[0]
+HAWE = fits.open(folder + 'HAWC/Rereduced_2018-07-14_HA_F487_031-040_POL_70060912_HAWE_HWPE_PMP.fits')
+HAWE_Q = HAWE['STOKES Q']
+HAWE_U = HAWE['STOKES U']
 vecMask_E = fits.open(folder + 'HAWC/masks/rereduced/BandE_polFlux_3.fits')[0]
+BandE_boundary = HAWE[0].copy()
+BandE_boundary.data = np.ones(HAWE[0].shape)
+BandE_boundary.data[np.isnan(HAWE[0].data)]=np.nan
 
 CO12 = fits.open(folder + 'CO_LarsBonne/CO/RCW36_integratedIntensity12CO.fits')[0]
 CO13 = fits.open(folder + 'CO_LarsBonne/CO/RCW36_integratedIntensity13CO.fits')[0]
 CII = fits.open(folder + 'CO_LarsBonne/CII/RCW36_integratedIntensityCII.fits')[0]
 Spitz_Ch1 = fits.open(folder + 'Spitzer/RCW36-4-selected_Post_BCDs/r15990016/ch1/pbcd/SPITZER_I1_15990016_0000_3_E8591943_maic.fits')[0]
 Spitz_Ch3 = fits.open(folder + 'Spitzer/RCW36-4-selected_Post_BCDs/r15990016/ch3/pbcd/SPITZER_I3_15990016_0000_3_E8592062_maic.fits')[0]
+Spitz_fix1 = fits.open(folder + 'Spitzer/CH1_factor5.fits')[0]
+Spitz_fix3 = fits.open(folder + 'Spitzer/CH3_interp.fits')[0]
+Spitz1_HAWC = fits.open(folder + 'Spitzer/CH1_HAWCproj.fits')[0]
+Spitz3_HAWC = fits.open(folder + 'Spitzer/CH3_HAWCproj.fits')[0]
+
 #ALMA_12m = fits.open(folder + 'ALMA/')
 ALMA_ACA = fits.open(folder + 'ALMA/VelaC_CR_ALMA2D.fits')[0]
+ALMA_mask = fits.open(folder + 'ALMA/ALMAcont_mask_3sig.fits')[0]
 OI = fits.open(folder + 'CO_LarsBonne/O/RCW36_OI_Integrated.fits')[0]
 Halpha = fits.open(folder + 'Halpha/Halpha_corrHead.fits')[0]
 
@@ -53,11 +66,18 @@ BLAST_Bmap = fits.open(folder + 'BLASTPol/BLASTPol_500_intermediate_BPOSang.fits
 
 #BLASTPol Cutouts
 CO12_B = fits.open(folder + 'Cutouts/12CO.fits')[0]
+H500_B = fits.open(folder + 'Cutouts/Hersh_500.fits')[0]
+H350_B = fits.open(folder + 'Cutouts/Hersh_350.fits')[0]
+H250_B = fits.open(folder + 'Cutouts/Hersh_250.fits')[0]
+H160_B = fits.open(folder + 'Cutouts/Hersh_160.fits')[0]
 H70_B = fits.open(folder + 'Cutouts/Hersh_70.fits')[0]
+Ncol_B = fits.open(folder + 'Cutouts/colDen.fits')[0]
 Mop_HNC_B = fits.open(folder + 'Cutouts/Mopra_HNC.fits')[0]
+Mop_C18O_B = fits.open(folder + 'Cutouts/Mopra_C18O.fits')[0]
+Mop_N2H_B = fits.open(folder + 'Cutouts/Mopra_N2H.fits')[0]
 Ncol_B = fits.open(folder + 'Cutouts/colDen.fits')[0]
 
-def runHRO(Map, Bmap, kstep, vecMask, location, Bproj):
+def runHRO(Map, Bmap, kstep, vecMask, location, Bproj=False):
     hro = h.HRO(Map, Qmap=None, Umap=None, Bmap=Bmap, hdu=vecMask, vecMask=vecMask, msk=True, kstep=kstep, Bproj=Bproj) 
     prefix='/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/Paper/' + location
     if os.path.exists(prefix)==False:
@@ -77,33 +97,75 @@ def runHRO_QU(Map, Qmap, Umap, kstep, vecMask, location):
         os.mkdir(prefix)
     r.makePlots(hro, prefix, isSim=False, label='')
 
+def CompareVectors(Map, Bmap, Qmap1, Umap1, Qmap2, Umap2, vecMask, location):
+    hro = h.HRO(Map=Map, Bmap=Bmap, Qmap=Qmap1, Umap=Umap1, Qmap2=Qmap2, Umap2=Umap2, hdu=vecMask, vecMask=vecMask, msk=True, compare=True) 
+    prefix='/Users/akankshabij/Documents/MSc/Research/Code/scripts/HRO/HRO_BijA/Output_Plots/Paper/CompareBfield/' + location
+    if os.path.exists(prefix)==False:
+        os.mkdir(prefix)
+    prefix=prefix
+    if os.path.exists(prefix)==False:
+        os.mkdir(prefix)
+    r.makePlots_Compare(hro, prefix, isSim=False, label='')
 
-# def prepHAWC(Map, Bmap, ksize):
-#     # 1. Smooth Map
-#     #Map_smooth = Map.copy()
-#     #Map_smooth.data = ndimage.filters.gaussian_filter(Map.data, [ksize, ksize], order=[0,0], mode='nearest')
-#     # 2. Project Map
-#     #Map_proj = projectMap(Map_smooth, Bmap)
-#     # 3. Convert to Bfield angle to radians
-#     Bmap.data = ((Bmap.copy().data)*u.deg).to(u.rad).value 
 
-#     return Map, Bmap#, Map_smooth
+def MaskALMA(Map, region, thres):        
 
-def projectMap(mapOrigin, ref):
-    '''This function projects a given map 'mapOrigin' onto the same WCS coordinates as a reference map and returns the map in the same shape'''
-    New = ref.copy()
-    proj, footprint = reproject_exact(mapOrigin, ref.header)
-    proj[np.isnan(ref.data)] = np.nan
-    proj[0].data = proj
-    New.data = proj
-    return New
+    #for region in regions:
+    Mask = Map.copy()
+    size=15
+    std = np.nanstd(Map.data[region[0]-size:region[0]+size, region[1]-size:region[1]+size])
+    mean = np.nanmean(Map.data[region[0]-size:region[0]+size, region[1]-size:region[1]+size])
+    #Std.append(s)
+    #Mean.append(m)
+    #std = np.nanmean(np.asarray(Std))
+    #mean = np.nanmean(np.asarray(Mean))
+    Mask.data = np.ones(Map.shape)
+    Mask.data[((Map.data - mean) / std) < thres]=np.nan
+    Mask.data[np.isnan(Map.data)]=np.nan
+    Mask.writeto('Output_plots/Paper/ALMA/ALMAcont_mask_3sig.fits')
+        
+    plt.close('all')
+    fig = plt.figure(figsize=[5,4], dpi=300)
+    fxx = aplpy.FITSFigure(Map, figure=fig, slices=[0])
+    fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
+    fxx.show_rectangles(region[0], region[1], size, size, coords_frame='pixel')
+    fxx.add_colorbar()
+    plt.savefig('Output_plots/Paper/ALMA/Region.png') 
+    
+    plt.close('all')
+    fig = plt.figure(figsize=[5,4], dpi=300)
+    fxx = aplpy.FITSFigure(Mask, figure=fig, slices=[0])
+    fxx.show_colorscale(interpolation='nearest', cmap='binary')
+    #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    fxx.add_colorbar()
+    plt.savefig('Output_plots/Paper/ALMA/Mask_values.png') 
 
-kstep=2
-runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/Hersch_70/', Bproj=True)
-kstep=3
-runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/Hersch_70/', Bproj=True)
-kstep=4
-runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/Hersch_70/', Bproj=True)
+    # plt.close('all')
+    # fig = plt.figure(figsize=[5,4], dpi=300)
+    # fxx = aplpy.FITSFigure(hro.Map, figure=fig, slices=[0])
+    # fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
+    # #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    # fxx.add_colorbar()
+    # plt.savefig(prefix+'Map_proj.png') 
+
+
+#MaskALMA(ALMA_ACA, [150, 60], thres=3) 
+
+#CompareVectors(HAWC[0], HAWC[11], HAWC_Q, HAWC_U, BLAST_Q, BLAST_U, vecMask_C, 'BandC_BLAST/')
+#CompareVectors(HAWE[0], HAWE[11], HAWE_Q, HAWE_U, BLAST_Q, BLAST_U, vecMask_E, 'BandE_BLAST/')
+#CompareVectors(HAWC[0], HAWC[11], HAWC_Q, HAWC_U, HAWE_Q, HAWE_U, vecMask_C, 'BandC_BandE/')
+
+# kstep=2
+# runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BandE_boundary, location='BLASTPol/Hersch_70/', Bproj=True)
+# runHRO(H160_B, BLAST_Bmap, kstep=kstep, vecMask=BandE_boundary, location='BLASTPol/Hersch_160/', Bproj=True)
+# runHRO(H250_B, BLAST_Bmap, kstep=kstep, vecMask=BandE_boundary, location='BLASTPol/Hersch_250/', Bproj=True)
+# runHRO(H350_B, BLAST_Bmap, kstep=kstep, vecMask=BandE_boundary, location='BLASTPol/Hersch_350/', Bproj=True)
+# runHRO(H500_B, BLAST_Bmap, kstep=kstep, vecMask=BandE_boundary, location='BLASTPol/Hersch_500/', Bproj=True)
+# runHRO(Ncol_B, BLAST_Bmap, kstep=kstep, vecMask=BandE_boundary, location='BLASTPol/Hersch_ColDen/', Bproj=True)
+# kstep=3
+# runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/Hersch_70/', Bproj=True)
+# kstep=4
+# runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/Hersch_70/', Bproj=True)
 
 # kstep=3
 # runHRO_QU(Ncol_B, Qmap=BLAST_Q, Umap=BLAST_U, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/Ncol/') 
@@ -111,11 +173,11 @@ runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/He
 # runHRO_QU(Ncol_B, Qmap=BLAST_Q, Umap=BLAST_U, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/Ncol/') 
 
 # kstep=2
-# runHRO_QU(ALMA_ACA, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/ALMA_cont/') 
+# runHRO_QU(ALMA_ACA, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=ALMA_mask, location='BandC/ALMA_cont/Mask/') 
 # kstep=3
-# runHRO_QU(ALMA_ACA, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/ALMA_cont/') 
+# runHRO_QU(ALMA_ACA, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=ALMA_mask, location='BandC/ALMA_cont/Mask/') 
 # kstep=4
-# runHRO_QU(ALMA_ACA, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/ALMA_cont/') 
+# runHRO_QU(ALMA_ACA, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=ALMA_mask, location='BandC/ALMA_cont/Mask/') 
 # kstep=5
 # runHRO_QU(ALMA_ACA, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/ALMA_cont/') 
 # kstep=6
@@ -126,14 +188,14 @@ runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/He
 # runHRO_QU(ALMA_ACA, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/ALMA_cont/') 
 
 # kstep=2
-# runHRO_QU(Spitz_Ch1, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/')
-# runHRO_QU(Spitz_Ch3, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch3/')  
+# runHRO_QU(Spitz1_HAWC, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/')
+# runHRO_QU(Spitz3_HAWC, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch3/')  
 # kstep=3
-# runHRO_QU(Spitz_Ch1, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/')
-# runHRO_QU(Spitz_Ch3, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch3/')  
+# runHRO_QU(Spitz1_HAWC, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/')
+# runHRO_QU(Spitz3_HAWC, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch3/')  
 # kstep=4
-# runHRO_QU(Spitz_Ch1, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/')
-# runHRO_QU(Spitz_Ch3, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch3/')  
+# runHRO_QU(Spitz1_HAWC, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/')
+# runHRO_QU(Spitz3_HAWC, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch3/')  
 # kstep=5
 # runHRO_QU(Spitz_Ch1, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/')
 # runHRO_QU(Spitz_Ch3, Qmap=HAWC[2], Umap=HAWC[4], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch3/')   
@@ -182,7 +244,7 @@ runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/He
 # runHRO(Halpha, HAWE[11], kstep=4, vecMask=vecMask_E, location='BandE/Halpha/kstep4/')
 # runHRO(ALMA_ACA, HAWE[11], kstep=4, vecMask=vecMask_E, location='BandE/ALMA_cont/kstep4/')
 
-#kstep=7
+kstep=2
 # runHRO(Ncol, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Ncol_Av/')
 # runHRO(CO12, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/12CO/')
 # runHRO(CO13, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/13CO/')
@@ -201,12 +263,26 @@ runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/He
 # runHRO(Mop_HNC_more, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_HNC_n10to30/')
 # runHRO(Mop_C18O, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_C18O_n10to30/')
 # runHRO(Mop_N2H, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_N2H_n10to30/')
-# runHRO(Spitz_Ch1, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/')
-# runHRO(Spitz_Ch3, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch3/')
+runHRO(Spitz_Ch1, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/Spitz_proj/')
+#runHRO(Spitz3_HAWC, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch3/')
 # #runHRO(OI, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/OI/')
 # runHRO(Halpha, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Halpha/')
 # runHRO(ALMA_ACA, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/ALMA_cont/')
-# kstep=6
+# kstep=2
+# runHRO(Mop_N2H_B, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_N2H_cutout/')
+# runHRO(Mop_N2H_B, HAWE[11], kstep=kstep, vecMask=vecMask_E, location='BandE/Mopra_N2H_cutout/')
+# runHRO(Mop_C18O_B, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_C18O_cutout/')
+# runHRO(Mop_C18O_B, HAWE[11], kstep=kstep, vecMask=vecMask_E, location='BandE/Mopra_C18O_cutout/')
+# kstep=3
+# runHRO(Mop_N2H_B, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_N2H_cutout/')
+# runHRO(Mop_N2H_B, HAWE[11], kstep=kstep, vecMask=vecMask_E, location='BandE/Mopra_N2H_cutout/')
+# runHRO(Mop_C18O_B, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_C18O_cutout/')
+# runHRO(Mop_C18O_B, HAWE[11], kstep=kstep, vecMask=vecMask_E, location='BandE/Mopra_C18O_cutout/')
+# kstep=4
+# runHRO(Mop_N2H_B, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_N2H_cutout/')
+# runHRO(Mop_N2H_B, HAWE[11], kstep=kstep, vecMask=vecMask_E, location='BandE/Mopra_N2H_cutout/')
+# runHRO(Mop_C18O_B, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_C18O_cutout/')
+# runHRO(Mop_C18O_B, HAWE[11], kstep=kstep, vecMask=vecMask_E, location='BandE/Mopra_C18O_cutout/')
 # runHRO(Ncol, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Ncol_Av/')
 # runHRO(CO12, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/12CO/')
 # runHRO(CO13, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/13CO/')
@@ -223,6 +299,7 @@ runHRO(H70_B, BLAST_Bmap, kstep=kstep, vecMask=BLAST_mask, location='BLASTPol/He
 # runHRO(H_500, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Hersh_500/')
 # runHRO(Mop_HNC_less, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_HNC_0to12/')
 # runHRO(Mop_HNC_more, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_HNC_n10to30/')
+# runHRO(Mop_HNC_B, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_HNC_cutout/')
 # runHRO(Mop_C18O, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_C18O_n10to30/')
 # runHRO(Mop_N2H, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Mopra_N2H_n10to30/')
 # runHRO(Spitz_Ch1, HAWC[11], kstep=kstep, vecMask=vecMask_C, location='BandC/Spitz_Ch1/')

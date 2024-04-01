@@ -10,7 +10,6 @@ from spectral_cube import SpectralCube
 import astropy.units as u
 import astropy.constants as c
 import os
-from spectral_cube import SpectralCube
 import imageio
 import matplotlib.backends.backend_pdf as pdf
 
@@ -870,9 +869,7 @@ def runAnalysis(Bmap, outName, vecMask=None, Mask=None, label='', index=0, proje
     makePlots(hro, prefix, isSim, label, BinMap)
     return hro
 
-def makePlots(hro, prefix, isSim, label, BinMap=None):
-    if isSim: scale=15; step=20
-    else: scale=5; step=6
+def makePlots(hro, prefix, isSim, label, BinMap=None, scale=3, step=4):
     if BinMap is None:
         label=label
     else:

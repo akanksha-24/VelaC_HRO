@@ -11,7 +11,9 @@ from reproject import reproject_interp, reproject_exact
 class HRO:
     '''Class to perform 'Histogram of Relative Orientation' Analysis between a given Map and Inferred Magnetic Field Direction'''
 
-    def __init__(self, Map, Qmap=None, Umap=None, Bmap=None, hdu=None, vecMask=None, msk=False, kernel='Gaussian', kstep=1, convention=1, gstep=[1,1,1], histbins=20, compare=False, Qmap2=None, Umap2=None, BinMap=None,Bproj=False):
+    def __init__(self, Map, Qmap=None, Umap=None, Bmap=None, hdu=None, vecMask=None, 
+                msk=False, kernel='Gaussian', kstep=0, convention=1, gstep=[1,1,1], 
+                histbins=20, compare=False, Qmap2=None, Umap2=None, BinMap=None,Bproj=False):
         '''Intialization of HRO class'''
 
         # Initialize
@@ -25,13 +27,7 @@ class HRO:
         self.histbins = histbins
         self.BinMap =  self.Map.data if BinMap is None else BinMap.copy().data
 
-        #Apply mask
-        # if msk==True:
-        #     self.Map[np.argwhere(hdu.data == 0)] = np.nan
-        #     self.Qmap[np.argwhere(hdu.data == 0)] = np.nan
-        #     self.Umap[np.argwhere(hdu.data == 0)] = np.nan
-
-         # conver to radians
+         # Convert Bmap to radians
         if (Bmap is None)==False and np.nanmax(self.Bmap.data) > np.pi*2:
                 self.Bmap.data = ((self.Bmap.data)*u.deg).to(u.rad).value 
 
@@ -45,10 +41,10 @@ class HRO:
 
     def HROanalysis(self, convention, msk, hdu, vecMask, gstep, kstep, kernel, histbins, Bproj):
 
-        self.dMdx_full = self.Map_full.copy()
-        self.dMdx_full.data = ndimage.filters.gaussian_filter(self.Map_full.data, [kstep, kstep], order=[1,0], mode='nearest')
-        self.dMdy_full = self.Map_full.copy()
-        self.dMdy_full.data = ndimage.filters.gaussian_filter(self.Map_full.data, [kstep, kstep], order=[0,1], mode='nearest')
+        #self.dMdx_full = self.Map_full.copy()
+        #self.dMdx_full.data = ndimage.filters.gaussian_filter(self.Map_full.data, [kstep, kstep], order=[1,0], mode='nearest')
+        #self.dMdy_full = self.Map_full.copy()
+        #self.dMdy_full.data = ndimage.filters.gaussian_filter(self.Map_full.data, [kstep, kstep], order=[0,1], mode='nearest')
         
         # 1. Smooth Map
         # To avoid convovling NaN's (use two sub-arrays) : https://stackoverflow.com/questions/18697532/gaussian-filtering-a-image-with-nan-in-python
@@ -71,25 +67,14 @@ class HRO:
         # WW_y = ndimage.filters.gaussian_filter(W, [kstep, kstep], order=[0,0], mode='nearest')
         # self.dMdy_full.data = VV_y / WW_y
 
-        # Check that input is in desired format:
+        # Qmap is given
         if (self.Qmap is None)==False:
         # #    assert self.Map.shape == self.Qmap.shape and self.Map.shape == self.Umap.shape and self.Qmap.shape == self.Umap.shape, "Dimensions of Map and Polarization data do not match"
-
-            # if msk==True:
-            #     for i in range(hdu.data.shape[0]):
-            #         for j in range(hdu.data.shape[1]):
-            #             if (hdu.data[i,j]!=1) or (vecMask.data[i,j]!=1) or np.isnan(self.Map[i,j]) or np.isnan(self.dMdx[i,j]) or np.isnan(self.dMdy[i,j]):
-            #                 self.Map[i,j]=np.nan
-            #                 self.Qmap[i,j]=np.nan
-            #                 self.Umap[i,j]=np.nan
-            #                 self.BinMap[i,j]=np.nan
-            #                 self.dMdx[i,j]=np.nan
-            #                 self.dMdy[i,j]=np.nan
-
             #Calculate the Polarization angle from Stokes Parameters
             self.Qmap = projectMap(self.Qmap, self.Map_full)
             self.Umap = projectMap(self.Umap, self.Map_full)
             self.vecMask = projectMap(self.vecMask, self.Map_full)
+            self.hdu = projectMap(self.hdu, self.Map_full)
 
             if convention==1:                                                             # Standard convention used for most polarization data 
                 self.Efield = 0.5*np.arctan2(self.Umap.data,self.Qmap.data)               # Use 4-quadrant arctan, gives result in radians
@@ -107,37 +92,15 @@ class HRO:
             self.Bmap = self.Map_full.copy()
             self.Bmap.data = self.Bfield
 
-            self.dMdx_proj = self.dMdx_full
-            self.dMdy_proj = self.dMdy_full
-            self.dMdx = self.dMdx_proj.data
-            self.dMdy = self.dMdy_proj.data
+            self.Map_proj = self.Map_full.copy()
         
         else: 
-            # 2. Project Map
-            if Bproj==False:
-                self.dMdx_proj = projectMap(self.dMdx_full, self.Bmap)
-                self.dMdy_proj = projectMap(self.dMdy_full, self.Bmap)
-                self.dMdx = self.dMdx_proj.data
-                self.dMdy = self.dMdy_proj.data
-
-            else:
-                self.Bmap = projectMap(self.Bmap.copy(), self.Map_full)
-                self.vecMask = projectMap(self.vecMask.copy(), self.Map_full)
-                self.BinMap = self.Bmap.data
-                self.dMdx_proj = self.dMdx_full
-                self.dMdy_proj = self.dMdy_full
-                self.dMdx = self.dMdx_proj.data
-                self.dMdy = self.dMdy_proj.data
-
-            # if msk==True:
-            #     for i in range(hdu.data.shape[0]):
-            #         for j in range(hdu.data.shape[1]):
-            #             if (hdu.data[i,j]!=1) or (vecMask.data[i,j]!=1) or np.isnan(self.Map[i,j]) or np.isnan(self.dMdx[i,j]) or np.isnan(self.dMdy[i,j]):
-            #                 self.Map[i,j]=np.nan
-            #                 self.Bmap[i,j]=np.nan
-            #                 self.BinMap[i,j]=np.nan
-            #                 self.dMdx[i,j]=np.nan
-            #                 self.dMdy[i,j]=np.nan
+            #1. project
+            self.Map_proj = projectMap(self.Map_full, self.Bmap)
+            if (self.Map_proj.data.shape != self.hdu.data.shape):
+                self.hdu = projectMap(self.hdu, self.Bmap)
+            if (self.Map_proj.data.shape != self.vecMask.data.shape):
+                self.vecMask = projectMap(self.vecMask, self.Bmap)
 
             # B-field is given
             self.Bfield = self.Bmap.data                                      # Inferred B-field is 90 deg offset from polarization angle
@@ -158,8 +121,20 @@ class HRO:
         # self.dMdx = self.SmoothKernel(self.dMdx_, kstep, type=kernel)
         # self.dMdy = self.SmoothKernel(self.dMdy_, kstep, type=kernel)
 
+        #2. Smooth
+        #self.kstep_pix, self.kstep_arcsec = self.KernelLength(self.Map_full, self.Bmap, set_pix=kstep)
+        self.dMdx_proj = self.Map_proj.copy()
+        self.dMdx = ndimage.filters.gaussian_filter(self.Map_proj.data, [kstep, kstep], order=[1,0], mode='nearest')
+        self.dMdx_proj.data = self.dMdx
+
+        self.dMdy_proj = self.Map_proj.copy()
+        self.dMdy = ndimage.filters.gaussian_filter(self.Map_proj.data, [kstep, kstep], order=[0,1], mode='nearest')
+        self.dMdy_proj.data = self.dMdy
+
         # Find Gradient magnitude and direction and contour direction
         self.mag = np.sqrt(self.dMdx**2 + self.dMdy**2)                               # Gradient magnitude
+
+        # NaN out any areas that are close to zero, where gradient turns around:
 
         # mask gradient amplitude below 10%
         # percentile = np.linspace(10,100,10)
@@ -181,9 +156,9 @@ class HRO:
             for i in range(self.vecMask.data.shape[0]):
                 for j in range(self.vecMask.data.shape[1]):
                     #if (hdu.data[i,j]!=1) or (vecMask.data[i,j]!=1) or np.isnan(self.Map[i,j]) or np.isnan(self.dMdx[i,j]) or np.isnan(self.dMdy[i,j]):
-                    if (self.vecMask.data[i,j]!=1): #or (self.mag < 0.1):
+                    if (self.vecMask.data[i,j]!=1) or (self.hdu.data[i,j]!=1): #or (self.mag[i,j] < 0.2):
                         self.phi[i,j]=np.nan
-        
+
         # Caluclate Rayleigh Statistic 
         self.Zx = self.RayleighStatistic(self.phi)
 
@@ -200,7 +175,6 @@ class HRO:
         partitions = 5
         percentile = [(100/partitions)*(i+1) for i in range(partitions)]
         self.sections = np.nanpercentile(self.BinMap, percentile)
-        print(self.sections)
         try:
             self.digitized = np.digitize(self.BinMap, self.sections)
         except:
@@ -209,8 +183,6 @@ class HRO:
         # print(np.min(digitized))
         # print(np.max(digitized))
         phi_sections = [self.phi[self.digitized == i] for i in range(partitions)]
-        print(phi_sections[0].shape)
-        print(phi_sections[2].shape)
         self.nvectors = [phi_sect.shape[0] for phi_sect in phi_sections]
         # print(phi_1.shape)
         # print(phi_2.shape)
@@ -382,7 +354,6 @@ class HRO:
         partitions = 5
         percentile = [(100/partitions)*(i+1) for i in range(partitions)]
         self.sections = np.nanpercentile(self.BinMap, percentile)
-        print(self.sections)
         try:
             self.digitized = np.digitize(self.BinMap, self.sections)
         except:
@@ -391,8 +362,6 @@ class HRO:
         # print(np.min(digitized))
         # print(np.max(digitized))
         phi_sections = [self.phi[self.digitized == i] for i in range(partitions)]
-        print(phi_sections[0].shape)
-        print(phi_sections[2].shape)
         self.nvectors = [phi_sect.shape[0] for phi_sect in phi_sections]
         # print(phi_1.shape)
         # print(phi_2.shape)
@@ -414,6 +383,8 @@ class HRO:
 
         # Calculate weighted Projected Rayleigh Statistic, as defined in report
         Zx = np.nansum(weights*np.cos(theta)) / np.sqrt(np.nansum(weights**2)/2)
+
+        #var_Zx = np.sqrt(2*(np.nansum(np.cos(theta) - Zx**2))/n)
 
         return Zx
 
@@ -504,10 +475,38 @@ class HRO:
         FWHM_gauss = np.sqrt(new**2 - old**2)
         return FWHM_gauss
 
+    # def KernelLength(self, Map, ref, set_pix=0):
+    #     degp1 = np.abs(Map.header['CDELT1'])
+    #     degp2 = np.abs(ref.header['CDELT1'])
+    #     if set_pix==0:
+    #         if degp1 > degp2:
+    #             pix = degp1 / degp2
+    #         else:
+    #             pix = degp2 / degp1
+    #     else:
+    #         pix = set_pix
+    #     pix = int(pix)
+    #     arcsec_pix = ((pix * degp2)*u.deg).to(u.arcsec).value
+    #     return pix, arcsec_pix
+
+def header_rescale(pre_hdu, rebin):
+    """Scale Header according to the rebin size"""
+    hdu = pre_hdu.copy()
+    naxis1, naxis2 = hdu.header['NAXIS1'], hdu.header['NAXIS2']
+    hdu.header['NAXIS1'] = int(rebin * hdu.header['NAXIS1'])
+    hdu.header['NAXIS2'] = int(rebin * hdu.header['NAXIS2'])
+    hdu.header['CDELT1'] /= rebin
+    hdu.header['CDELT2'] /= rebin
+    hdu.header['CRPIX1'] = (hdu.header['CRPIX1'] / naxis1) * hdu.header['NAXIS1']
+    hdu.header['CRPIX2'] = (hdu.header['CRPIX2'] / naxis2) * hdu.header['NAXIS2']
+    hdu.data = np.ones((hdu.header['NAXIS1'], hdu.header['NAXIS2']))
+    return hdu                
+
 def projectMap(mapOrigin, ref):
     '''This function projects a given map 'mapOrigin' onto the same WCS coordinates as a reference map and returns the map in the same shape'''
     New = ref.copy()
-    proj, footprint = reproject_exact(mapOrigin, ref.header)
+    #proj, footprint = reproject_exact(mapOrigin, ref.header)
+    proj, footprint = reproject_interp(mapOrigin, ref.header)
     #proj[np.isnan(ref.data)] = np.nan
     proj[0].data = proj
     New.data = proj

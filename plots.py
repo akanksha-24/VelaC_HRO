@@ -9,9 +9,9 @@ from matplotlib import cm
 #import run as r
 import HRO as h
 
-#folder = '/Users/akankshabij/Documents/MSc/Research/Data/'
+folder = '/Users/akankshabij/Documents/MSc/Research/Data/'
 Hersch = fits.open('/Users/akankshabij/Documents/MSc/Research/Data/Herschel/HighresNmap_herschel_velac_high_av.fits')[0]
-#HAWC = fits.open(folder + 'HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
+HAWC = fits.open(folder + 'HAWC/Rereduced_2018-07-14_HA_F487_004-065_POL_70060957_HAWC_HWPC_PMP.fits')
 
 def projectMap(mapOrigin, ref):
     '''This function projects a given map 'mapOrigin' onto the same WCS coordinates as a reference map and returns the map in the same shape'''
@@ -24,8 +24,8 @@ def plot_Fields(hro, prefix='', Bfield=True, Efield=False, step=12, scale=8):
     '''This function plots the B-field and E-field, used for debugging purposes to make sure the result is as expected'''
     
     # Use fits header information to get maps in WCS coordinates
-    Map = hro.Map_full.copy()
-    Map.data = hro.Map
+    #Map = hro.Map_full.copy()
+    #Map.data = hro.Map
     B_hdr = hro.hdu.copy()                                 
     B_hdr.data = hro.Bfield
     E_hdr = hro.hdu.copy()
@@ -34,21 +34,28 @@ def plot_Fields(hro, prefix='', Bfield=True, Efield=False, step=12, scale=8):
 
     plt.close('all')
     fig = plt.figure(figsize=[5,4], dpi=300)
-    fxx = aplpy.FITSFigure(Map, figure=fig, slices=[0])
+    if hro.Qmap is None:
+        fxx = aplpy.FITSFigure(hro.Map_proj, figure=fig, slices=[0])
+    else:
+        print("here")
+        Map = h.projectMap(hro.Map_proj, hro.hdu)
+        fxx = aplpy.FITSFigure(Map, figure=fig, slices=[0])
+    #fxx.recenter(134.87,-43.74, height=0.15, width=0.15)
     fxx.show_colorscale(cmap='binary', interpolation='nearest')#, vmin=0.5e22, vmax=4e22)
     fxx.add_colorbar()
 
     if Bfield==True:
-        fxx.show_vectors(hro.vecMask, B_hdr, step=step, scale=scale, units = 'radians', color = 'blue', linewidth=2)     # plot B-field vectors 
+        fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'blue', linewidth=1)     # plot B-field vectors 
         fxx.set_title('Magnetic Field')
         plt.savefig(prefix+'BField_ForTalk.png')
     if Efield==True:
         plt.close('all')
         fig = plt.figure(figsize=[5,4], dpi=300)
-        fxx = aplpy.FITSFigure(Map, figure=fig, slices=[0])
+        fxx = aplpy.FITSFigure(hro.Map_proj, figure=fig, slices=[0])
         fxx.show_colorscale(cmap='binary', interpolation='nearest')
         fxx.add_colorbar()
-        fxx.show_vectors(hro.vecMask, E_hdr, step=step, scale=scale, units='radians', color = 'red', linewidth=2)        # plot Polarization angle 
+        #fxx.recenter(134.87,-43.74, height=0.15, width=0.15)
+        fxx.show_vectors(hro.vecMask, E_hdr, step=step, scale=scale, units='radians', color = 'red', linewidth=1)        # plot Polarization angle 
         fxx.set_title('Polarization Angle')
         plt.savefig(prefix+'Efield.png')
     # if Efield==True and Bfield==True:
@@ -72,27 +79,37 @@ def plot_Map(hro, prefix='', norm=False):
 
     plt.close('all')
     fig = plt.figure(figsize=[5,4], dpi=300)
-    fxx = aplpy.FITSFigure(hro.Map, figure=fig, slices=[0])
+    fxx = aplpy.FITSFigure(hro.Map_proj, figure=fig, slices=[0])
     fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
     #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
     fxx.add_colorbar()
     plt.savefig(prefix+'Map_proj.png')
 
+    plt.close('all')
     fig = plt.figure(figsize=[5,4], dpi=300)
-    fxx = aplpy.FITSFigure(hro.dMdx_full, figure=fig, slices=[0])
+    fxx = aplpy.FITSFigure(hro.Map_proj, figure=fig, slices=[0])
     fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
-    #fxx.recenter(134.87,-43.74, height=0.15, width=0.15)
-    #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    fxx.show_vectors(hro.vecMask, hro.Bmap, step=8, scale=6, units = 'radians', color = 'white', linewidth=3) 
+    fxx.show_vectors(hro.vecMask, hro.Bmap, step=8, scale=6, units = 'radians', color = 'black', linewidth=2) 
+    fxx.show_contour(Hersch, levels=[20,50,80], colors='purple')
     fxx.add_colorbar()
-    plt.savefig(prefix+'Mapx_smooth.png')
+    plt.savefig(prefix+'Map_paper.png')
 
-    fig = plt.figure(figsize=[5,4], dpi=300)
-    fxx = aplpy.FITSFigure(hro.dMdy_full, figure=fig, slices=[0])
-    fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
-    #fxx.recenter(134.87,-43.74, height=0.15, width=0.15)
-    #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
-    fxx.add_colorbar()
-    plt.savefig(prefix+'Mapy_smooth.png')
+    # fig = plt.figure(figsize=[5,4], dpi=300)
+    # fxx = aplpy.FITSFigure(hro.dMdx_full, figure=fig, slices=[0])
+    # fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
+    # #fxx.recenter(134.87,-43.74, height=0.15, width=0.15)
+    # #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    # fxx.add_colorbar()
+    # plt.savefig(prefix+'Mapx_smooth.png')
+
+    # fig = plt.figure(figsize=[5,4], dpi=300)
+    # fxx = aplpy.FITSFigure(hro.dMdy_full, figure=fig, slices=[0])
+    # fxx.show_colorscale(interpolation='nearest', cmap='Spectral_r')
+    # #fxx.recenter(134.87,-43.74, height=0.15, width=0.15)
+    # #fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    # fxx.add_colorbar()
+    # plt.savefig(prefix+'Mapy_smooth.png')
 
     fig = plt.figure(figsize=[5,4], dpi=300)
     fxx = aplpy.FITSFigure(hro.dMdx_proj, figure=fig, slices=[0])
@@ -172,17 +189,17 @@ def plot_vectors(hro, prefix='', step=20, scale=10):
     Map.data = hro.Map
     Bfield = hro.Bmap.copy()
     #Bfield.data = hro.Bfield
-    cont = hro.Map_full.copy()
+    cont = hro.vecMask.copy()
     cont.data = hro.contour
 
     plt.close('all')
     fig = plt.figure(figsize=[5,4], dpi=300)
-    fxx = aplpy.FITSFigure(Map, figure=fig, slices=[0])
+    fxx = aplpy.FITSFigure(hro.Map_proj, figure=fig, slices=[0])
     fxx.show_colorscale(interpolation='nearest', cmap='binary')
     #fxx.show_vectors(hro.vecMask, Bfield, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2)
     #fxx.show_vectors(hro.vecMask, cont, step=step, scale=scale, units='radians', color = 'white', linewidth=2)
-    fxx.show_vectors(hro.vecMask, Bfield, step=step, scale=scale, units = 'radians', color = 'blue', linewidth=1.7, label='Magnetic Field')
-    fxx.show_vectors(hro.vecMask, cont, step=step, scale=scale, units='radians', color = 'red', linewidth=1.7, label='Contour Orientation')
+    fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'blue', linewidth=1, label='Magnetic Field')
+    fxx.show_vectors(hro.vecMask, cont, step=step, scale=scale, units='radians', color = 'red', linewidth=1, label='Contour Orientation')
     plt.legend()
     fxx.add_colorbar()
     #fxx.set_title('Comparing the contour and magnetic field orientation')
@@ -193,7 +210,8 @@ def plot_phi(hro, prefix='', label='', norm=False, step=5, scale=4):
     # Map = hro.vecMask.copy()
     # Map.data = hro.unmasked_Map
 
-    phi = hro.vecMask.copy()
+
+    phi = hro.Map_proj.copy()
     phi.data = (hro.phi * u.rad).to(u.deg)
 
     phi_proj = h.projectMap(phi, hro.hdu)
@@ -213,14 +231,17 @@ def plot_phi(hro, prefix='', label='', norm=False, step=5, scale=4):
 
     plt.close('all')
     fig = plt.figure(figsize=[5,4], dpi=300)
-    #fxx = aplpy.FITSFigure(phi_proj, figure=fig, slices=[0], figsize=[12,8])
+    #if hro.Qmap is None:
     fxx = aplpy.FITSFigure(phi, figure=fig, slices=[0], figsize=[12,8])
+    #fxx.show_vectors(hro.vecMask, hro.Bmap, step=12, scale=8, units = 'radians', color = 'white', linewidth=3) #linewidth=2.5)
+    fxx.show_vectors(hro.vecMask, hro.Bmap, step=25, scale=20, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
+    # else:
+    #     fxx = aplpy.FITSFigure(phi_proj, figure=fig, slices=[0], figsize=[12,8])
+    #     fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'white', linewidth=1.5) #linewidth=2.5)
+    #     fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
     fxx.show_colorscale(vmin=0, vmax=90, cmap='Spectral')
-    fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2) #linewidth=2.5)
-    fxx.show_vectors(vecMask_proj, Bfield_proj, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
-    #fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'white', linewidth=2) #linewidth=2.5)
-    #fxx.show_vectors(hro.vecMask, hro.Bmap, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1) #linewidth=1.8)
-    fxx.show_contour(Hersch, levels=[20,50,80], colors='white')
+    #fxx.recenter(134.87,-43.75, height=0.12, width=0.13)
+    #fxx.show_contour(Hersch, levels=[20,50,80], colors='purple')
     #fxx.show_vectors(hro.hdu, hro.Bfield2, step=step, scale=scale, units = 'radians', color = 'black', linewidth=1)
     #fxx.show_contour(Map, levels=hro.sections[-3:-1], cmap='plasma')
     # print(np.nanmin(Map.data) + np.nanstd(Map.data))
@@ -292,6 +313,16 @@ def plot_histShaded(hro, label, prefix=''):
     plt.xlabel('Relative angle, $\phi$')
     plt.ylabel('Histogram Density')
     plt.savefig(prefix+'phi_SHADEDhistogram.png')
+
+    plt.close('all')
+    plt.figure(figsize=[5,4], dpi=300)
+    angle = np.linspace(0, 90, hro.histbins)
+    plt.plot(angle, hro.hist, linewidth=2, color='black')
+    plt.text(5, np.max(hro.hist)*0.9,  'Zx = {0}'.format(np.round(hro.Zx, 1)), fontsize=14)
+    plt.text(5, np.max(hro.hist)*0.8,  '<$\phi$> = {0}'.format(np.round(hro.meanPhi*180/np.pi, 1)), fontsize=14)
+    plt.xlabel('Relative angle, $\phi$')
+    plt.ylabel('Histogram Density')
+    plt.savefig(prefix+'phi_Paper_histogram.png')
 
 def plot_secthist(hro, label, prefix=''):
     '''hro is an HRO class object as defined in HRO.py'''
